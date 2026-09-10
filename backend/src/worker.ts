@@ -99,6 +99,164 @@ async function getAuthUser(request: Request, env: Env): Promise<any | null> {
   return user;
 }
 
+function parseDurationString(str?: string): number {
+  if (!str) return 180;
+  const parts = str.split(':').map(Number);
+  if (parts.some(isNaN)) return 180;
+  if (parts.length === 3) {
+    return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  }
+  if (parts.length === 2) {
+    return parts[0] * 60 + parts[1];
+  }
+  return parts[0] || 180;
+}
+
+async function searchYouTube(query: string, limit = 25, apiKey?: string): Promise<any[]> {
+  // 1. YouTube Web Search Scraper via ytInitialData
+  try {
+    const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}&sp=EgIQAQ%253D%253D`;
+    const res = await fetch(searchUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept-Language': 'en-US,en;q=0.9',
+      },
+    });
+
+    if (res.ok) {
+      const html = await res.text();
+      const match = html.match(/var ytInitialData\s*=\s*({.+?});<\/script>/) || html.match(/ytInitialData\s*=\s*({.+?});/);
+      if (match) {
+        const data = JSON.parse(match[1]);
+        const contents = data.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents || [];
+        const tracks: any[] = [];
+
+        for (const section of contents) {
+          const items = section.itemSectionRenderer?.contents || [];
+          for (const item of items) {
+            const v = item.videoRenderer;
+            if (!v || !v.videoId) continue;
+
+            const title = v.title?.runs?.map((r: any) => r.text).join('') || v.title?.simpleText || 'Unknown Song';
+            const artist = v.ownerText?.runs?.map((r: any) => r.text).join('') || v.shortBylineText?.runs?.map((r: any) => r.text).join('') || 'YouTube Artist';
+            const durationStr = v.lengthText?.simpleText || v.lengthText?.runs?.map((r: any) => r.text).join('');
+            const duration = parseDurationString(durationStr);
+            const viewsStr = v.viewCountText?.simpleText || v.shortViewCountText?.simpleText || '0';
+            const thumbnail = v.thumbnail?.thumbnails?.pop()?.url || `https://i.ytimg.com/vi/${v.videoId}/hqdefault.jpg`;
+
+            tracks.push({
+              id: `yt_${v.videoId}`,
+              youtube_id: v.videoId,
+              title: title.replace(/(\(|\[)(official\s*(video|audio|music\s*video|lyric\s*video|hd|4k)?)(\)|\])/gi, '').trim(),
+              artist,
+              duration,
+              thumbnail_url: thumbnail.startsWith('//') ? `https:${thumbnail}` : thumbnail,
+              genre: 'Music',
+              views: parseInt(viewsStr.replace(/[^0-9]/g, '')) || 0,
+              created_at: new Date().toISOString(),
+            });
+
+            if (tracks.length >= limit) break;
+          }
+          if (tracks.length >= limit) break;
+        }
+
+        if (tracks.length > 0) return tracks;
+      }
+    }
+  } catch (err) {
+    console.warn('YouTube HTML search failed, trying InnerTube:', err);
+  }
+
+  // 2. Query YouTube InnerTube Edge API directly
+  try {
+    const res = await fetch('https://www.youtube.com/youtubei/v1/search', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      },
+      body: JSON.stringify({
+        context: {
+          client: {
+            clientName: 'WEB',
+            clientVersion: '2.20240101.01.00',
+            hl: 'en',
+            gl: 'US',
+          },
+        },
+        query: query,
+      }),
+    });
+
+    if (res.ok) {
+      const data = await res.json() as any;
+      const contents = data.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents || [];
+      const tracks: any[] = [];
+
+      for (const section of contents) {
+        const itemContents = section.itemSectionRenderer?.contents || [];
+        for (const item of itemContents) {
+          const v = item.videoRenderer;
+          if (!v || !v.videoId) continue;
+
+          const title = v.title?.runs?.map((r: any) => r.text).join('') || v.title?.simpleText || 'Unknown Song';
+          const artist = v.ownerText?.runs?.map((r: any) => r.text).join('') || v.shortBylineText?.runs?.map((r: any) => r.text).join('') || 'YouTube Artist';
+          const durationStr = v.lengthText?.simpleText || v.lengthText?.runs?.map((r: any) => r.text).join('');
+          const duration = parseDurationString(durationStr);
+          const viewsStr = v.viewCountText?.simpleText || v.shortViewCountText?.simpleText || '0';
+          const thumbnail = v.thumbnail?.thumbnails?.pop()?.url || `https://i.ytimg.com/vi/${v.videoId}/hqdefault.jpg`;
+
+          tracks.push({
+            id: `yt_${v.videoId}`,
+            youtube_id: v.videoId,
+            title: title.replace(/(\(|\[)(official\s*(video|audio|music\s*video|lyric\s*video|hd|4k)?)(\)|\])/gi, '').trim(),
+            artist,
+            duration,
+            thumbnail_url: thumbnail.startsWith('//') ? `https:${thumbnail}` : thumbnail,
+            genre: 'Music',
+            views: parseInt(viewsStr.replace(/[^0-9]/g, '')) || 0,
+            created_at: new Date().toISOString(),
+          });
+
+          if (tracks.length >= limit) break;
+        }
+        if (tracks.length >= limit) break;
+      }
+
+      if (tracks.length > 0) return tracks;
+    }
+  } catch (err) {
+    console.warn('InnerTube search failed:', err);
+  }
+
+  // 3. Official YouTube API v3 if API key configured
+  if (apiKey) {
+    try {
+      const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(query + ' music')}&type=video&videoCategoryId=10&maxResults=${limit}&key=${apiKey}`;
+      const res = await fetch(url);
+      if (res.ok) {
+        const data = await res.json() as any;
+        if (data.items && data.items.length > 0) {
+          return data.items.map((item: any) => ({
+            id: `yt_${item.id.videoId}`,
+            youtube_id: item.id.videoId,
+            title: (item.snippet.title || '').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&'),
+            artist: (item.snippet.channelTitle || 'YouTube Music').replace(/&amp;/g, '&'),
+            duration: 210,
+            thumbnail_url: item.snippet.thumbnails?.high?.url || item.snippet.thumbnails?.medium?.url || `https://i.ytimg.com/vi/${item.id.videoId}/hqdefault.jpg`,
+            genre: 'Music',
+            views: 0,
+            created_at: new Date().toISOString(),
+          }));
+        }
+      }
+    } catch {}
+  }
+
+  return [];
+}
+
 export default {
   async fetch(request: Request, env: Env, ctx: any): Promise<Response> {
     const url = new URL(request.url);
@@ -973,6 +1131,128 @@ export default {
           .bind(msgId, roomId, user.id, content.trim(), messageType).run();
 
         return json({ success: true, message: 'Message sent' });
+      }
+
+      // ==========================================
+      // MUSIC & LIVE YOUTUBE SEARCH ROUTES
+      // ==========================================
+
+      // 1. Search Music (Live YouTube + Local Catalog)
+      if (path === '/music/search' && method === 'GET') {
+        const query = (url.searchParams.get('q') || '').trim();
+        const limit = parseInt(url.searchParams.get('limit') || '25', 10);
+
+        if (!query) {
+          return json({ success: false, message: 'Search query "q" required' }, 400);
+        }
+
+        // Live YouTube Search
+        const ytTracks = await searchYouTube(query, limit, env.YOUTUBE_API_KEY);
+
+        // Save results to D1 database in background
+        if (env.DB && ytTracks.length > 0) {
+          for (const t of ytTracks) {
+            env.DB.prepare(`
+              INSERT INTO tracks (id, youtube_id, title, artist, duration, thumbnail_url, genre, views)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+              ON CONFLICT(id) DO NOTHING
+            `).bind(t.id, t.youtube_id, t.title, t.artist, t.duration, t.thumbnail_url, t.genre, t.views || 0).run().catch(() => {});
+          }
+        }
+
+        return json({
+          success: true,
+          data: ytTracks,
+          query,
+          count: ytTracks.length,
+        });
+      }
+
+      // 2. Trending Music
+      if (path === '/music/trending' && method === 'GET') {
+        const limit = parseInt(url.searchParams.get('limit') || '20', 10);
+        const ytTracks = await searchYouTube('top music hits trending songs 2025', limit, env.YOUTUBE_API_KEY);
+        return json({ success: true, data: ytTracks });
+      }
+
+      // 3. Genre Music
+      if (path.startsWith('/music/genre/') && method === 'GET') {
+        const genre = decodeURIComponent(path.split('/')[3] || '');
+        const limit = parseInt(url.searchParams.get('limit') || '20', 10);
+        const ytTracks = await searchYouTube(`${genre} music top songs hits playlist`, limit, env.YOUTUBE_API_KEY);
+        return json({ success: true, data: ytTracks, genre });
+      }
+
+      // 4. Mood Music
+      if (path.startsWith('/music/mood/') && method === 'GET') {
+        const moodId = decodeURIComponent(path.split('/')[3] || '');
+        const limit = parseInt(url.searchParams.get('limit') || '20', 10);
+        const moodQueries: Record<string, string> = {
+          focus: 'focus ambient instrumental study music',
+          chill: 'chill lofi beats night vibes',
+          workout: 'high energy gym workout motivation music',
+          party: 'party hits club dance music',
+          sleep: 'sleep ambient soundscapes peaceful relaxation',
+          gaming: 'synthwave cyberpunk gaming soundtrack music',
+        };
+        const query = moodQueries[moodId] || `${moodId} music playlist`;
+        const ytTracks = await searchYouTube(query, limit, env.YOUTUBE_API_KEY);
+        return json({ success: true, data: ytTracks, mood: moodId });
+      }
+
+      // 5. Track Details
+      if (path.startsWith('/music/track/') && method === 'GET') {
+        const id = decodeURIComponent(path.split('/')[3] || '');
+        const cleanYtId = id.replace(/^yt_/, '');
+
+        // Check local DB first
+        if (env.DB) {
+          const dbTrack = await env.DB.prepare('SELECT * FROM tracks WHERE id = ? OR youtube_id = ?').bind(id, cleanYtId).first();
+          if (dbTrack) {
+            return json({ success: true, data: dbTrack });
+          }
+        }
+
+        // Fetch via YouTube search
+        const ytTracks = await searchYouTube(cleanYtId, 1, env.YOUTUBE_API_KEY);
+        if (ytTracks.length > 0) {
+          return json({ success: true, data: ytTracks[0] });
+        }
+
+        return json({
+          success: true,
+          data: {
+            id: `yt_${cleanYtId}`,
+            youtube_id: cleanYtId,
+            title: 'YouTube Track',
+            artist: 'YouTube Artist',
+            duration: 210,
+            thumbnail_url: `https://i.ytimg.com/vi/${cleanYtId}/hqdefault.jpg`,
+            genre: 'Music',
+            views: 0,
+          },
+        });
+      }
+
+      // 6. Categories (Genres & Moods)
+      if (path === '/music/categories' && method === 'GET') {
+        return json({
+          success: true,
+          data: {
+            genres: [
+              'Pop', 'Hip-Hop', 'Electronic', 'Rock', 'R&B', 'Indie', 'Lo-Fi',
+              'Jazz', 'Classical', 'Ambient', 'Synthwave', 'Metal', 'Acoustic', 'Bollywood'
+            ],
+            moods: [
+              { id: 'focus', title: 'Deep Focus', color: 'from-blue-600 to-indigo-900' },
+              { id: 'chill', title: 'Late Night Chill', color: 'from-purple-600 to-violet-950' },
+              { id: 'workout', title: 'High Energy / Workout', color: 'from-red-600 to-orange-800' },
+              { id: 'party', title: 'Weekend Party', color: 'from-pink-600 to-rose-900' },
+              { id: 'sleep', title: 'Sleep & Relaxation', color: 'from-indigo-800 to-slate-900' },
+              { id: 'gaming', title: 'Synth & Gaming', color: 'from-cyan-600 to-blue-900' },
+            ],
+          },
+        });
       }
 
       // Fallback 404

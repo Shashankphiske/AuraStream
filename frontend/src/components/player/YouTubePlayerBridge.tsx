@@ -227,6 +227,59 @@ export const YouTubePlayerBridge: React.FC = () => {
     }
   }, [isPlaying, currentTrack?.is_local]);
 
+  // MediaSession API Integration for Android / Mobile Notification and Lock Screen Controls
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('mediaSession' in navigator)) return;
+
+    if (!currentTrack) {
+      try {
+        navigator.mediaSession.metadata = null;
+        navigator.mediaSession.playbackState = 'none';
+      } catch {}
+      return;
+    }
+
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: currentTrack.title || 'Unknown Title',
+        artist: currentTrack.artist || 'AuraStream',
+        album: currentTrack.genre || 'AuraStream Music',
+        artwork: currentTrack.thumbnail_url
+          ? [
+              { src: currentTrack.thumbnail_url, sizes: '96x96', type: 'image/jpeg' },
+              { src: currentTrack.thumbnail_url, sizes: '128x128', type: 'image/jpeg' },
+              { src: currentTrack.thumbnail_url, sizes: '192x192', type: 'image/jpeg' },
+              { src: currentTrack.thumbnail_url, sizes: '256x256', type: 'image/jpeg' },
+              { src: currentTrack.thumbnail_url, sizes: '384x384', type: 'image/jpeg' },
+              { src: currentTrack.thumbnail_url, sizes: '512x512', type: 'image/jpeg' },
+            ]
+          : [],
+      });
+
+      navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
+
+      navigator.mediaSession.setActionHandler('play', () => {
+        setPlaying(true);
+      });
+      navigator.mediaSession.setActionHandler('pause', () => {
+        setPlaying(false);
+      });
+      navigator.mediaSession.setActionHandler('nexttrack', () => {
+        nextTrack();
+      });
+      navigator.mediaSession.setActionHandler('previoustrack', () => {
+        usePlayerStore.getState().prevTrack();
+      });
+      navigator.mediaSession.setActionHandler('seekto', (details: any) => {
+        if (details.seekTime !== undefined && details.seekTime !== null) {
+          usePlayerStore.getState().seekTo(details.seekTime);
+        }
+      });
+    } catch (e) {
+      console.warn('MediaSession error:', e);
+    }
+  }, [currentTrack?.id, currentTrack?.title, currentTrack?.artist, currentTrack?.thumbnail_url, isPlaying]);
+
   // 4. Handle Volume and Mute sync
   useEffect(() => {
     if (localAudioRef.current) {

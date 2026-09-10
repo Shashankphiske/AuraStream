@@ -7,10 +7,10 @@ workers_dev = true
 [[d1_databases]]
 binding = "DB"
 database_name = "aurastream-db"
-database_id = "e3a92b62-9137-49a3-ad76-96a7020413e1"
+database_id = "df043532-d6fb-49e9-be9e-3c141e04131a"
 
 [vars]
 NODE_ENV = "production"
-CLIENT_URL = "https://your-app.netlify.app"
+CLIENT_URL = "https://aurastream.netlify.app"
 JWT_ACCESS_EXPIRATION = "15m"
 JWT_REFRESH_EXPIRATION = "7d"
