@@ -11,6 +11,7 @@ import { HistoryPage } from '../pages/HistoryPage';
 import { AdminPage } from '../pages/AdminPage';
 import { RoomsPage } from '../pages/RoomsPage';
 import { RoomSessionPage } from '../pages/RoomSessionPage';
+import { CreateRoomPage } from '../pages/CreateRoomPage';
 import { LocalMusicPage } from '../pages/LocalMusicPage';
 import { DownloadAppPage } from '../pages/DownloadAppPage';
 import { NotFoundPage } from '../pages/NotFoundPage';
@@ -24,6 +25,7 @@ export const AppRoutes: React.FC = () => {
         <Route path="library" element={<LibraryPage />} />
         <Route path="local" element={<LocalMusicPage />} />
         <Route path="rooms" element={<RoomsPage />} />
+        <Route path="create-room" element={<CreateRoomPage />} />
         <Route path="room/:code" element={<RoomSessionPage />} />
         <Route path="download" element={<DownloadAppPage />} />
         <Route path="playlist/:id" element={<PlaylistPage />} />

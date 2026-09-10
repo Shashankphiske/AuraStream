@@ -122,7 +122,7 @@ export const RoomsPage: React.FC = () => {
             openModal('login');
             return;
           }
-          setIsCreateModalOpen(true);
+          navigate('/create-room');
         }}
         className="fixed bottom-24 right-4 z-40 md:hidden flex items-center gap-2 px-4 py-3 rounded-full bg-gradient-to-r from-rose-500 via-pink-500 to-purple-600 text-white font-bold text-xs shadow-2xl shadow-rose-500/60 hover:scale-105 active:scale-95 transition-all border border-white/30 cursor-pointer animate-in fade-in slide-in-from-bottom-4 duration-300"
         title="Host a Session"
@@ -166,7 +166,7 @@ export const RoomsPage: React.FC = () => {
                   openModal('login');
                   return;
                 }
-                setIsCreateModalOpen(true);
+                navigate('/create-room');
               }}
               className="flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-gradient-to-r from-rose-500 via-pink-500 to-purple-600 hover:from-rose-400 hover:to-purple-500 text-white font-bold text-sm shadow-lg shadow-rose-500/30 hover:shadow-rose-500/50 hover:scale-[1.02] active:scale-95 transition-all cursor-pointer border border-white/20"
             >
@@ -248,7 +248,7 @@ export const RoomsPage: React.FC = () => {
               openModal('login');
               return;
             }
-            setIsCreateModalOpen(true);
+            navigate('/create-room');
           }}
           className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-800/80 hover:bg-zinc-750 text-zinc-300 hover:text-white border border-zinc-700/60 text-xs font-semibold transition-colors cursor-pointer"
         >
@@ -279,7 +279,7 @@ export const RoomsPage: React.FC = () => {
                     openModal('login');
                     return;
                   }
-                  setIsCreateModalOpen(true);
+                  navigate('/create-room');
                 }}
                 className="flex items-center gap-2 self-start"
               >

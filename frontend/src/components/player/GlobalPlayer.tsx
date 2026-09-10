@@ -303,9 +303,9 @@ export const GlobalPlayer: React.FC = () => {
 
         <button
           onClick={handleClosePlayer}
-          title="Close Player"
-          aria-label="Close Player"
-          className="p-1.5 rounded-full text-zinc-400 hover:text-rose-400 hover:bg-white/5 transition-colors cursor-pointer"
+          title="Cut / Dismiss Player"
+          aria-label="Cut / Dismiss Player"
+          className="p-1.5 rounded-full text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 active:scale-90 transition-colors cursor-pointer"
         >
           <X className="w-4 h-4" />
         </button>
@@ -467,12 +467,11 @@ export const GlobalPlayer: React.FC = () => {
           />
         </div>
 
-        {/* Close Player */}
         <button
           onClick={handleClosePlayer}
-          title="Close Player"
-          aria-label="Close Player"
-          className="p-2 rounded-full text-zinc-400 hover:text-rose-400 hover:bg-white/5 transition-colors cursor-pointer"
+          title="Cut / Dismiss Player"
+          aria-label="Cut / Dismiss Player"
+          className="p-2 rounded-full text-zinc-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
         >
           <X className="w-4 h-4" />
         </button>
