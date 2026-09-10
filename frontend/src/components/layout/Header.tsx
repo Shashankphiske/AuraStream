@@ -28,10 +28,20 @@ export const Header: React.FC = () => {
 
   const isSearchPage = location.pathname.startsWith('/search');
 
+  // Sync search input with URL search param
+  useEffect(() => {
+    if (isSearchPage) {
+      const params = new URLSearchParams(location.search);
+      setSearchQuery(params.get('q') || '');
+    }
+  }, [location.search, isSearchPage]);
+
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (searchQuery.trim()) {
       navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
+    } else {
+      navigate('/search');
     }
   };
 
@@ -72,7 +82,18 @@ export const Header: React.FC = () => {
           <input
             type="text"
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => {
+              const val = e.target.value;
+              setSearchQuery(val);
+              if (isSearchPage) {
+                navigate(val.trim() ? `/search?q=${encodeURIComponent(val.trim())}` : '/search', { replace: true });
+              }
+            }}
+            onFocus={() => {
+              if (!isSearchPage) {
+                navigate(searchQuery.trim() ? `/search?q=${encodeURIComponent(searchQuery.trim())}` : '/search');
+              }
+            }}
             placeholder="Search songs, artists, albums..."
             className="w-full pl-10 pr-4 py-2 rounded-full bg-zinc-900/90 border border-zinc-800 text-xs text-white placeholder-zinc-500 outline-none focus:border-zinc-600 focus:bg-zinc-900 transition-all"
           />

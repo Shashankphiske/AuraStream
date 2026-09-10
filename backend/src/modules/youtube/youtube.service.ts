@@ -44,11 +44,95 @@ export class YouTubeService {
           return results;
         }
       } catch (err) {
-        logger.warn('YouTube Data API search failed, falling back to yt-search:', err);
+        logger.warn('YouTube Data API search failed, falling back:', err);
       }
     }
 
-    // 2. Resilient fallback via yt-search
+    // 2. High-speed Invidious Instances
+    const mirrors = [
+      'https://invidious.flokinet.to/api/v1/search',
+      'https://inv.nadeko.net/api/v1/search',
+      'https://invidious.nerdvpn.de/api/v1/search',
+    ];
+
+    for (const mirror of mirrors) {
+      try {
+        const response = await axios.get(mirror, {
+          params: { q: query, type: 'video' },
+          timeout: 4000,
+          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
+        });
+        const items = response.data;
+        if (Array.isArray(items) && items.length > 0) {
+          const tracks: ITrack[] = items
+            .filter((v: any) => v && (v.videoId || v.id))
+            .slice(0, limit)
+            .map((v: any) => {
+              const videoId = v.videoId || v.id;
+              return {
+                id: `yt_${videoId}`,
+                youtube_id: videoId,
+                title: (v.title || 'YouTube Song').replace(/(\(|\[)(official\s*(video|audio|music\s*video|lyric\s*video|hd|4k)?)(\)|\])/gi, '').trim(),
+                artist: v.author || 'YouTube Artist',
+                duration: v.lengthSeconds || 210,
+                thumbnail_url: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+                genre: 'Music',
+                views: v.viewCount || 0,
+                created_at: new Date().toISOString(),
+              };
+            });
+
+          if (tracks.length > 0) {
+            setToCache(cacheKey, tracks);
+            return tracks;
+          }
+        }
+      } catch {}
+    }
+
+    // 3. YouTube InnerTube API
+    try {
+      const response = await axios.post(
+        'https://www.youtube.com/youtubei/v1/search',
+        {
+          context: { client: { clientName: 'WEB', clientVersion: '2.20240101.01.00', hl: 'en', gl: 'US' } },
+          query,
+        },
+        { timeout: 4000 }
+      );
+
+      const contents = response.data?.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents || [];
+      const tracks: ITrack[] = [];
+      for (const section of contents) {
+        const itemContents = section.itemSectionRenderer?.contents || [];
+        for (const item of itemContents) {
+          const v = item.videoRenderer;
+          if (!v || !v.videoId) continue;
+          const title = v.title?.runs?.map((r: any) => r.text).join('') || v.title?.simpleText || 'Unknown Song';
+          const artist = v.ownerText?.runs?.map((r: any) => r.text).join('') || v.shortBylineText?.runs?.map((r: any) => r.text).join('') || 'YouTube Artist';
+          tracks.push({
+            id: `yt_${v.videoId}`,
+            youtube_id: v.videoId,
+            title: title.replace(/(\(|\[)(official\s*(video|audio|music\s*video|lyric\s*video|hd|4k)?)(\)|\])/gi, '').trim(),
+            artist,
+            duration: 210,
+            thumbnail_url: `https://i.ytimg.com/vi/${v.videoId}/hqdefault.jpg`,
+            genre: 'Music',
+            views: 0,
+            created_at: new Date().toISOString(),
+          });
+          if (tracks.length >= limit) break;
+        }
+        if (tracks.length >= limit) break;
+      }
+
+      if (tracks.length > 0) {
+        setToCache(cacheKey, tracks);
+        return tracks;
+      }
+    } catch {}
+
+    // 4. Resilient fallback via yt-search
     try {
       const searchResult = await ytSearch(`${query} music`);
       const videos = (searchResult.videos || []).slice(0, limit);

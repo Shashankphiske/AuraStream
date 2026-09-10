@@ -193,25 +193,24 @@ export const musicService = {
   },
 
   async search(query: string, limit: number = 25): Promise<ITrack[]> {
-    if (!query.trim()) return this.getTrending(limit);
+    const trimmed = query.trim();
+    if (!trimmed) return this.getTrending(limit);
 
+    // 1. Primary: Edge API live YouTube search
     try {
-      const res = await api.get('/music/search', { params: { q: query, limit } });
-      if (res.data?.data && res.data.data.length > 0) return res.data.data;
-    } catch {}
+      const res = await api.get('/music/search', { params: { q: trimmed, limit } });
+      if (res.data?.data && Array.isArray(res.data.data) && res.data.data.length > 0) {
+        return res.data.data;
+      }
+    } catch (err) {
+      console.warn('Edge search API failed, falling back to client search engine:', err);
+    }
 
-    // Fallback directly to live YouTube query
-    const live = await directYouTubeSearch(query.trim(), limit);
+    // 2. Secondary: Client direct Invidious / InnerTube engine
+    const live = await directYouTubeSearch(trimmed, limit);
     if (live.length > 0) return live;
 
-    const lower = query.toLowerCase();
-    const matches = CURATED_TRACKS.filter(
-      (t) =>
-        t.title.toLowerCase().includes(lower) ||
-        t.artist.toLowerCase().includes(lower) ||
-        t.genre.toLowerCase().includes(lower)
-    );
-    return matches.length > 0 ? matches : CURATED_TRACKS.slice(0, limit);
+    return [];
   },
 
   async getTrackDetails(id: string): Promise<ITrack> {
