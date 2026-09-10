@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'https://aurastream-backend.sheeladecorproject.workers.dev/api/v1',
+  baseURL: import.meta.env.VITE_API_URL || 'https://aurastream-backend.shashankphiskework.workers.dev/api/v1',
   withCredentials: false,
   headers: {
     'Content-Type': 'application/json',

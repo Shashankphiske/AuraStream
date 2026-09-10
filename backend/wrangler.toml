@@ -7,7 +7,7 @@ workers_dev = true
 [[d1_databases]]
 binding = "DB"
 database_name = "aurastream-db"
-database_id = "df043532-d6fb-49e9-be9e-3c141e04131a"
+database_id = "e3a92b62-9137-49a3-ad76-96a7020413e1"
 
 [vars]
 NODE_ENV = "production"
