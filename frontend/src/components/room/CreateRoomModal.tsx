@@ -251,11 +251,11 @@ export const CreateRoomModal: React.FC<CreateRoomModalProps> = ({ isOpen, onClos
           </div>
         )}
 
-        <div className="flex items-center justify-end gap-3 pt-3 border-t border-zinc-800">
-          <Button variant="ghost" size="sm" type="button" onClick={onClose}>
+        <div className="sticky bottom-0 bg-[#0e1222]/95 backdrop-blur-md pt-3 pb-1 -mx-1 px-1 border-t border-zinc-800/80 flex items-center justify-end gap-2.5 z-10">
+          <Button variant="ghost" size="sm" type="button" onClick={onClose} className="text-xs">
             Cancel
           </Button>
-          <Button variant="primary" size="md" type="submit" isLoading={isLoading} className="flex items-center gap-2">
+          <Button variant="primary" size="md" type="submit" isLoading={isLoading} className="flex items-center gap-2 text-xs sm:text-sm">
             <Radio className="w-4 h-4" />
             <span>Launch Room</span>
           </Button>
