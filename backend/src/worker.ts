@@ -112,125 +112,59 @@ function parseDurationString(str?: string): number {
   return parts[0] || 180;
 }
 
+function extractTracksFromObject(obj: any, limit = 25): any[] {
+  const tracks: any[] = [];
+  const seen = new Set<string>();
+
+  function traverse(current: any) {
+    if (!current || typeof current !== 'object') return;
+
+    if (current.videoRenderer && current.videoRenderer.videoId) {
+      const v = current.videoRenderer;
+      if (!seen.has(v.videoId)) {
+        seen.add(v.videoId);
+        const title = v.title?.runs?.map((r: any) => r.text).join('') || v.title?.simpleText || 'Unknown Song';
+        const artist = v.ownerText?.runs?.map((r: any) => r.text).join('') || v.shortBylineText?.runs?.map((r: any) => r.text).join('') || 'YouTube Artist';
+        const durationStr = v.lengthText?.simpleText || '3:30';
+        const duration = parseDurationString(durationStr);
+        const viewsStr = v.viewCountText?.simpleText || v.shortViewCountText?.simpleText || '0';
+        const thumbnail = v.thumbnail?.thumbnails?.pop()?.url || `https://i.ytimg.com/vi/${v.videoId}/hqdefault.jpg`;
+
+        tracks.push({
+          id: `yt_${v.videoId}`,
+          youtube_id: v.videoId,
+          title: title.replace(/(\(|\[)(official\s*(video|audio|music\s*video|lyric\s*video|hd|4k)?)(\)|\])/gi, '').trim(),
+          artist,
+          duration,
+          thumbnail_url: thumbnail.startsWith('//') ? `https:${thumbnail}` : thumbnail,
+          genre: 'Music',
+          views: parseInt(viewsStr.replace(/[^0-9]/g, '')) || 0,
+          created_at: new Date().toISOString(),
+        });
+      }
+    }
+
+    if (tracks.length >= limit) return;
+
+    if (Array.isArray(current)) {
+      for (const item of current) {
+        traverse(item);
+        if (tracks.length >= limit) return;
+      }
+    } else {
+      for (const key of Object.keys(current)) {
+        traverse(current[key]);
+        if (tracks.length >= limit) return;
+      }
+    }
+  }
+
+  traverse(obj);
+  return tracks;
+}
+
 async function searchYouTube(query: string, limit = 25, apiKey?: string): Promise<any[]> {
-  // 1. YouTube Web Search Scraper via ytInitialData
-  try {
-    const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}&sp=EgIQAQ%253D%253D`;
-    const res = await fetch(searchUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept-Language': 'en-US,en;q=0.9',
-      },
-    });
-
-    if (res.ok) {
-      const html = await res.text();
-      const match = html.match(/var ytInitialData\s*=\s*({.+?});<\/script>/) || html.match(/ytInitialData\s*=\s*({.+?});/);
-      if (match) {
-        const data = JSON.parse(match[1]);
-        const contents = data.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents || [];
-        const tracks: any[] = [];
-
-        for (const section of contents) {
-          const items = section.itemSectionRenderer?.contents || [];
-          for (const item of items) {
-            const v = item.videoRenderer;
-            if (!v || !v.videoId) continue;
-
-            const title = v.title?.runs?.map((r: any) => r.text).join('') || v.title?.simpleText || 'Unknown Song';
-            const artist = v.ownerText?.runs?.map((r: any) => r.text).join('') || v.shortBylineText?.runs?.map((r: any) => r.text).join('') || 'YouTube Artist';
-            const durationStr = v.lengthText?.simpleText || v.lengthText?.runs?.map((r: any) => r.text).join('');
-            const duration = parseDurationString(durationStr);
-            const viewsStr = v.viewCountText?.simpleText || v.shortViewCountText?.simpleText || '0';
-            const thumbnail = v.thumbnail?.thumbnails?.pop()?.url || `https://i.ytimg.com/vi/${v.videoId}/hqdefault.jpg`;
-
-            tracks.push({
-              id: `yt_${v.videoId}`,
-              youtube_id: v.videoId,
-              title: title.replace(/(\(|\[)(official\s*(video|audio|music\s*video|lyric\s*video|hd|4k)?)(\)|\])/gi, '').trim(),
-              artist,
-              duration,
-              thumbnail_url: thumbnail.startsWith('//') ? `https:${thumbnail}` : thumbnail,
-              genre: 'Music',
-              views: parseInt(viewsStr.replace(/[^0-9]/g, '')) || 0,
-              created_at: new Date().toISOString(),
-            });
-
-            if (tracks.length >= limit) break;
-          }
-          if (tracks.length >= limit) break;
-        }
-
-        if (tracks.length > 0) return tracks;
-      }
-    }
-  } catch (err) {
-    console.warn('YouTube HTML search failed, trying InnerTube:', err);
-  }
-
-  // 2. Query YouTube InnerTube Edge API directly
-  try {
-    const res = await fetch('https://www.youtube.com/youtubei/v1/search', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      },
-      body: JSON.stringify({
-        context: {
-          client: {
-            clientName: 'WEB',
-            clientVersion: '2.20240101.01.00',
-            hl: 'en',
-            gl: 'US',
-          },
-        },
-        query: query,
-      }),
-    });
-
-    if (res.ok) {
-      const data = await res.json() as any;
-      const contents = data.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents || [];
-      const tracks: any[] = [];
-
-      for (const section of contents) {
-        const itemContents = section.itemSectionRenderer?.contents || [];
-        for (const item of itemContents) {
-          const v = item.videoRenderer;
-          if (!v || !v.videoId) continue;
-
-          const title = v.title?.runs?.map((r: any) => r.text).join('') || v.title?.simpleText || 'Unknown Song';
-          const artist = v.ownerText?.runs?.map((r: any) => r.text).join('') || v.shortBylineText?.runs?.map((r: any) => r.text).join('') || 'YouTube Artist';
-          const durationStr = v.lengthText?.simpleText || v.lengthText?.runs?.map((r: any) => r.text).join('');
-          const duration = parseDurationString(durationStr);
-          const viewsStr = v.viewCountText?.simpleText || v.shortViewCountText?.simpleText || '0';
-          const thumbnail = v.thumbnail?.thumbnails?.pop()?.url || `https://i.ytimg.com/vi/${v.videoId}/hqdefault.jpg`;
-
-          tracks.push({
-            id: `yt_${v.videoId}`,
-            youtube_id: v.videoId,
-            title: title.replace(/(\(|\[)(official\s*(video|audio|music\s*video|lyric\s*video|hd|4k)?)(\)|\])/gi, '').trim(),
-            artist,
-            duration,
-            thumbnail_url: thumbnail.startsWith('//') ? `https:${thumbnail}` : thumbnail,
-            genre: 'Music',
-            views: parseInt(viewsStr.replace(/[^0-9]/g, '')) || 0,
-            created_at: new Date().toISOString(),
-          });
-
-          if (tracks.length >= limit) break;
-        }
-        if (tracks.length >= limit) break;
-      }
-
-      if (tracks.length > 0) return tracks;
-    }
-  } catch (err) {
-    console.warn('InnerTube search failed:', err);
-  }
-
-  // 3. Official YouTube API v3 if API key configured
+  // 1. Official YouTube API v3 if API key configured
   if (apiKey) {
     try {
       const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(query + ' music')}&type=video&videoCategoryId=10&maxResults=${limit}&key=${apiKey}`;
@@ -252,6 +186,81 @@ async function searchYouTube(query: string, limit = 25, apiKey?: string): Promis
         }
       }
     } catch {}
+  }
+
+  // 2. High-availability Invidious API Instance
+  try {
+    const res = await fetch(`https://invidious.flokinet.to/api/v1/search?q=${encodeURIComponent(query)}&type=video`, {
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+    });
+
+    if (res.ok) {
+      const items = (await res.json()) as any[];
+      if (Array.isArray(items) && items.length > 0) {
+        return items
+          .filter((v: any) => v && (v.videoId || v.id))
+          .slice(0, limit)
+          .map((v: any) => {
+            const videoId = v.videoId || v.id;
+            return {
+              id: `yt_${videoId}`,
+              youtube_id: videoId,
+              title: (v.title || 'YouTube Song').replace(/(\(|\[)(official\s*(video|audio|music\s*video|lyric\s*video|hd|4k)?)(\)|\])/gi, '').trim(),
+              artist: v.author || 'YouTube Artist',
+              duration: v.lengthSeconds || 210,
+              thumbnail_url: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+              genre: 'Music',
+              views: v.viewCount || 0,
+              created_at: new Date().toISOString(),
+            };
+          });
+      }
+    }
+  } catch (e) {
+    console.warn('Flokinet failed:', e);
+  }
+
+  // 3. InnerTube Extraction
+  try {
+    const res = await fetch('https://www.youtube.com/youtubei/v1/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0' },
+      body: JSON.stringify({
+        context: { client: { clientName: 'WEB', clientVersion: '2.20240101.01.00', hl: 'en', gl: 'US' } },
+        query,
+      }),
+    });
+
+    if (res.ok) {
+      const data = await res.json() as any;
+      const tracks = extractTracksFromObject(data, limit);
+      if (tracks.length > 0) return tracks;
+    }
+  } catch (e) {
+    console.warn('InnerTube failed:', e);
+  }
+
+  // 4. YouTube HTML Search Scraper via ytInitialData
+  try {
+    const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}&sp=EgIQAQ%253D%253D`;
+    const res = await fetch(searchUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept-Language': 'en-US,en;q=0.9',
+      },
+    });
+
+    if (res.ok) {
+      const html = await res.text();
+      const match = html.match(/var ytInitialData\s*=\s*({.+?});<\/script>/) || html.match(/ytInitialData\s*=\s*({.+?});/);
+      if (match) {
+        const data = JSON.parse(match[1]);
+        const tracks = extractTracksFromObject(data, limit);
+        if (tracks.length > 0) return tracks;
+      }
+    }
+  } catch (err) {
+    console.warn('YouTube HTML search failed:', err);
   }
 
   return [];
@@ -291,6 +300,51 @@ export default {
             timestamp: new Date().toISOString(),
           },
         });
+      }
+
+      // Diagnostic /test-search
+      if (path.startsWith('/test-search')) {
+        const query = url.searchParams.get('q') || 'Coldplay';
+        const logs: any[] = [];
+
+        // Test Flokinet
+        try {
+          const res = await fetch(`https://invidious.flokinet.to/api/v1/search?q=${encodeURIComponent(query)}&type=video`, {
+            headers: { 'User-Agent': 'Mozilla/5.0' },
+          });
+          logs.push({ provider: 'flokinet', status: res.status, ok: res.ok });
+          if (res.ok) {
+            const data = await res.json();
+            logs.push({ provider: 'flokinet_data', count: Array.isArray(data) ? data.length : 0 });
+          } else {
+            const text = await res.text();
+            logs.push({ provider: 'flokinet_err', text: text.slice(0, 200) });
+          }
+        } catch (e: any) {
+          logs.push({ provider: 'flokinet_exception', err: e.message });
+        }
+
+        // Test InnerTube
+        try {
+          const res = await fetch('https://www.youtube.com/youtubei/v1/search', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0' },
+            body: JSON.stringify({
+              context: { client: { clientName: 'WEB', clientVersion: '2.20240101.01.00', hl: 'en', gl: 'US' } },
+              query,
+            }),
+          });
+          logs.push({ provider: 'innertube', status: res.status, ok: res.ok });
+          if (res.ok) {
+            const data = await res.json();
+            const extracted = extractTracksFromObject(data, 10);
+            logs.push({ provider: 'innertube_extracted', count: extracted.length });
+          }
+        } catch (e: any) {
+          logs.push({ provider: 'innertube_exception', err: e.message });
+        }
+
+        return json({ success: true, logs });
       }
 
       // 3. Database connectivity test
@@ -393,91 +447,140 @@ export default {
         return json({ success: true, data: user });
       }
 
-      // 6. MUSIC & SEARCH ROUTES
-      if (path === '/music/categories' && method === 'GET') {
-        const genres = ['Electronic', 'Synthwave', 'Lo-Fi', 'Pop', 'Rock', 'Hip-Hop', 'R&B', 'Ambient'];
-        const moods = [
-          { id: 'focus', name: 'Focus & Study', color: 'from-blue-600 to-indigo-800' },
-          { id: 'chill', name: 'Chill Vibes', color: 'from-emerald-600 to-teal-800' },
-          { id: 'energy', name: 'High Energy', color: 'from-fuchsia-600 to-pink-800' },
-          { id: 'night', name: 'Late Night Drive', color: 'from-purple-600 to-violet-900' },
-        ];
-        return json({ success: true, data: { genres, moods } });
+      // 6. LIVE MUSIC & YOUTUBE SEARCH ROUTES
+      if (path === '/music/search' && method === 'GET') {
+        const query = (url.searchParams.get('q') || '').trim();
+        const limit = parseInt(url.searchParams.get('limit') || '25', 10);
+
+        if (!query) {
+          return json({ success: false, message: 'Search query "q" required' }, 400);
+        }
+
+        // Direct YouTube URL or ID handling
+        const ytIdMatch = query.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/) || query.match(/^([a-zA-Z0-9_-]{11})$/);
+        if (ytIdMatch && ytIdMatch[1]) {
+          const videoId = ytIdMatch[1];
+          const directTrack = {
+            id: `yt_${videoId}`,
+            youtube_id: videoId,
+            title: `YouTube Stream (${videoId})`,
+            artist: 'YouTube',
+            duration: 210,
+            thumbnail_url: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+            genre: 'Music',
+            views: 1000000,
+            created_at: new Date().toISOString(),
+          };
+          // Also fetch full title if possible
+          const details = await searchYouTube(videoId, 1, env.YOUTUBE_API_KEY);
+          const finalTrack = details.length > 0 ? details[0] : directTrack;
+          return json({
+            success: true,
+            data: [finalTrack],
+            query,
+            count: 1,
+          });
+        }
+
+        const ytTracks = await searchYouTube(query, limit, env.YOUTUBE_API_KEY);
+
+        // Save results to D1 database in background
+        if (env.DB && ytTracks.length > 0) {
+          for (const t of ytTracks) {
+            env.DB.prepare(`
+              INSERT INTO tracks (id, youtube_id, title, artist, duration, thumbnail_url, genre, views)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+              ON CONFLICT(id) DO NOTHING
+            `).bind(t.id, t.youtube_id, t.title, t.artist, t.duration, t.thumbnail_url, t.genre, t.views || 0).run().catch(() => {});
+          }
+        }
+
+        return json({
+          success: true,
+          data: ytTracks,
+          query,
+          count: ytTracks.length,
+        });
       }
 
       if (path === '/music/trending' && method === 'GET') {
         const limit = parseInt(url.searchParams.get('limit') || '20', 10);
-        const tracks = await env.DB.prepare('SELECT * FROM tracks ORDER BY views DESC LIMIT ?').bind(limit).all();
-        return json({ success: true, data: tracks.results });
+        const ytTracks = await searchYouTube('top music hits trending songs 2025', limit, env.YOUTUBE_API_KEY);
+        return json({ success: true, data: ytTracks });
       }
 
       if (path.startsWith('/music/genre/') && method === 'GET') {
         const genre = decodeURIComponent(path.replace('/music/genre/', ''));
         const limit = parseInt(url.searchParams.get('limit') || '20', 10);
-        const tracks = await env.DB.prepare('SELECT * FROM tracks WHERE genre = ? COLLATE NOCASE LIMIT ?')
-          .bind(genre, limit).all();
-        return json({ success: true, data: tracks.results });
+        const ytTracks = await searchYouTube(`${genre} music top songs hits playlist`, limit, env.YOUTUBE_API_KEY);
+        return json({ success: true, data: ytTracks, genre });
+      }
+
+      if (path.startsWith('/music/mood/') && method === 'GET') {
+        const moodId = decodeURIComponent(path.replace('/music/mood/', ''));
+        const limit = parseInt(url.searchParams.get('limit') || '20', 10);
+        const moodQueries: Record<string, string> = {
+          focus: 'focus ambient instrumental study music',
+          chill: 'chill lofi beats night vibes',
+          workout: 'high energy gym workout motivation music',
+          party: 'party hits club dance music',
+          sleep: 'sleep ambient soundscapes peaceful relaxation',
+          gaming: 'synthwave cyberpunk gaming soundtrack music',
+        };
+        const query = moodQueries[moodId] || `${moodId} music playlist`;
+        const ytTracks = await searchYouTube(query, limit, env.YOUTUBE_API_KEY);
+        return json({ success: true, data: ytTracks, mood: moodId });
       }
 
       if (path.startsWith('/music/track/') && method === 'GET') {
         const trackId = decodeURIComponent(path.replace('/music/track/', ''));
-        let track = await env.DB.prepare('SELECT * FROM tracks WHERE id = ? OR youtube_id = ?')
-          .bind(trackId, trackId).first();
-        if (!track) {
-          // If not in DB, dynamically create track placeholder with youtube ID
-          track = {
-            id: trackId,
-            youtube_id: trackId,
+        const cleanYtId = trackId.replace(/^yt_/, '');
+
+        if (env.DB) {
+          const dbTrack = await env.DB.prepare('SELECT * FROM tracks WHERE id = ? OR youtube_id = ?').bind(trackId, cleanYtId).first();
+          if (dbTrack) {
+            return json({ success: true, data: dbTrack });
+          }
+        }
+
+        const ytTracks = await searchYouTube(cleanYtId, 1, env.YOUTUBE_API_KEY);
+        if (ytTracks.length > 0) {
+          return json({ success: true, data: ytTracks[0] });
+        }
+
+        return json({
+          success: true,
+          data: {
+            id: `yt_${cleanYtId}`,
+            youtube_id: cleanYtId,
             title: 'YouTube Stream',
             artist: 'YouTube Creator',
             duration: 210,
-            thumbnail_url: `https://i.ytimg.com/vi/${trackId}/mqdefault.jpg`,
+            thumbnail_url: `https://i.ytimg.com/vi/${cleanYtId}/hqdefault.jpg`,
             genre: 'Music',
             views: 1000000,
-          };
-        }
-        return json({ success: true, data: track });
+          },
+        });
       }
 
-      if (path === '/music/search' && method === 'GET') {
-        const q = url.searchParams.get('q') || '';
-        const limit = parseInt(url.searchParams.get('limit') || '20', 10);
-
-        // 1. First check local tracks table
-        const localMatches = await env.DB.prepare(
-          'SELECT * FROM tracks WHERE title LIKE ? OR artist LIKE ? OR genre LIKE ? LIMIT ?'
-        ).bind(`%${q}%`, `%${q}%`, `%${q}%`, limit).all();
-
-        if (localMatches.results && localMatches.results.length > 0) {
-          return json({ success: true, data: localMatches.results });
-        }
-
-        // 2. If YouTube API Key provided, query YouTube v3 API
-        if (env.YOUTUBE_API_KEY) {
-          try {
-            const ytRes = await fetch(
-              `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoCategoryId=10&maxResults=${limit}&q=${encodeURIComponent(q)}&key=${env.YOUTUBE_API_KEY}`
-            );
-            if (ytRes.ok) {
-              const ytData = await ytRes.json() as any;
-              const ytTracks = (ytData.items || []).map((item: any) => ({
-                id: item.id.videoId,
-                youtube_id: item.id.videoId,
-                title: item.snippet.title,
-                artist: item.snippet.channelTitle,
-                duration: 210,
-                thumbnail_url: item.snippet.thumbnails?.high?.url || item.snippet.thumbnails?.default?.url,
-                genre: 'Popular',
-                views: 500000,
-              }));
-              return json({ success: true, data: ytTracks });
-            }
-          } catch {}
-        }
-
-        // Fallback to all tracks if no search match
-        const fallback = await env.DB.prepare('SELECT * FROM tracks LIMIT ?').bind(limit).all();
-        return json({ success: true, data: fallback.results });
+      if (path === '/music/categories' && method === 'GET') {
+        return json({
+          success: true,
+          data: {
+            genres: [
+              'Pop', 'Hip-Hop', 'Electronic', 'Rock', 'R&B', 'Indie', 'Lo-Fi',
+              'Jazz', 'Classical', 'Ambient', 'Synthwave', 'Metal', 'Acoustic', 'Bollywood'
+            ],
+            moods: [
+              { id: 'focus', title: 'Deep Focus', color: 'from-blue-600 to-indigo-900' },
+              { id: 'chill', title: 'Late Night Chill', color: 'from-purple-600 to-violet-950' },
+              { id: 'workout', title: 'High Energy / Workout', color: 'from-red-600 to-orange-800' },
+              { id: 'party', title: 'Weekend Party', color: 'from-pink-600 to-rose-900' },
+              { id: 'sleep', title: 'Sleep & Relaxation', color: 'from-indigo-800 to-slate-900' },
+              { id: 'gaming', title: 'Synth & Gaming', color: 'from-cyan-600 to-blue-900' },
+            ],
+          },
+        });
       }
 
       // 7. RECOMMENDATIONS
@@ -1133,128 +1236,6 @@ export default {
         return json({ success: true, message: 'Message sent' });
       }
 
-      // ==========================================
-      // MUSIC & LIVE YOUTUBE SEARCH ROUTES
-      // ==========================================
-
-      // 1. Search Music (Live YouTube + Local Catalog)
-      if (path === '/music/search' && method === 'GET') {
-        const query = (url.searchParams.get('q') || '').trim();
-        const limit = parseInt(url.searchParams.get('limit') || '25', 10);
-
-        if (!query) {
-          return json({ success: false, message: 'Search query "q" required' }, 400);
-        }
-
-        // Live YouTube Search
-        const ytTracks = await searchYouTube(query, limit, env.YOUTUBE_API_KEY);
-
-        // Save results to D1 database in background
-        if (env.DB && ytTracks.length > 0) {
-          for (const t of ytTracks) {
-            env.DB.prepare(`
-              INSERT INTO tracks (id, youtube_id, title, artist, duration, thumbnail_url, genre, views)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-              ON CONFLICT(id) DO NOTHING
-            `).bind(t.id, t.youtube_id, t.title, t.artist, t.duration, t.thumbnail_url, t.genre, t.views || 0).run().catch(() => {});
-          }
-        }
-
-        return json({
-          success: true,
-          data: ytTracks,
-          query,
-          count: ytTracks.length,
-        });
-      }
-
-      // 2. Trending Music
-      if (path === '/music/trending' && method === 'GET') {
-        const limit = parseInt(url.searchParams.get('limit') || '20', 10);
-        const ytTracks = await searchYouTube('top music hits trending songs 2025', limit, env.YOUTUBE_API_KEY);
-        return json({ success: true, data: ytTracks });
-      }
-
-      // 3. Genre Music
-      if (path.startsWith('/music/genre/') && method === 'GET') {
-        const genre = decodeURIComponent(path.split('/')[3] || '');
-        const limit = parseInt(url.searchParams.get('limit') || '20', 10);
-        const ytTracks = await searchYouTube(`${genre} music top songs hits playlist`, limit, env.YOUTUBE_API_KEY);
-        return json({ success: true, data: ytTracks, genre });
-      }
-
-      // 4. Mood Music
-      if (path.startsWith('/music/mood/') && method === 'GET') {
-        const moodId = decodeURIComponent(path.split('/')[3] || '');
-        const limit = parseInt(url.searchParams.get('limit') || '20', 10);
-        const moodQueries: Record<string, string> = {
-          focus: 'focus ambient instrumental study music',
-          chill: 'chill lofi beats night vibes',
-          workout: 'high energy gym workout motivation music',
-          party: 'party hits club dance music',
-          sleep: 'sleep ambient soundscapes peaceful relaxation',
-          gaming: 'synthwave cyberpunk gaming soundtrack music',
-        };
-        const query = moodQueries[moodId] || `${moodId} music playlist`;
-        const ytTracks = await searchYouTube(query, limit, env.YOUTUBE_API_KEY);
-        return json({ success: true, data: ytTracks, mood: moodId });
-      }
-
-      // 5. Track Details
-      if (path.startsWith('/music/track/') && method === 'GET') {
-        const id = decodeURIComponent(path.split('/')[3] || '');
-        const cleanYtId = id.replace(/^yt_/, '');
-
-        // Check local DB first
-        if (env.DB) {
-          const dbTrack = await env.DB.prepare('SELECT * FROM tracks WHERE id = ? OR youtube_id = ?').bind(id, cleanYtId).first();
-          if (dbTrack) {
-            return json({ success: true, data: dbTrack });
-          }
-        }
-
-        // Fetch via YouTube search
-        const ytTracks = await searchYouTube(cleanYtId, 1, env.YOUTUBE_API_KEY);
-        if (ytTracks.length > 0) {
-          return json({ success: true, data: ytTracks[0] });
-        }
-
-        return json({
-          success: true,
-          data: {
-            id: `yt_${cleanYtId}`,
-            youtube_id: cleanYtId,
-            title: 'YouTube Track',
-            artist: 'YouTube Artist',
-            duration: 210,
-            thumbnail_url: `https://i.ytimg.com/vi/${cleanYtId}/hqdefault.jpg`,
-            genre: 'Music',
-            views: 0,
-          },
-        });
-      }
-
-      // 6. Categories (Genres & Moods)
-      if (path === '/music/categories' && method === 'GET') {
-        return json({
-          success: true,
-          data: {
-            genres: [
-              'Pop', 'Hip-Hop', 'Electronic', 'Rock', 'R&B', 'Indie', 'Lo-Fi',
-              'Jazz', 'Classical', 'Ambient', 'Synthwave', 'Metal', 'Acoustic', 'Bollywood'
-            ],
-            moods: [
-              { id: 'focus', title: 'Deep Focus', color: 'from-blue-600 to-indigo-900' },
-              { id: 'chill', title: 'Late Night Chill', color: 'from-purple-600 to-violet-950' },
-              { id: 'workout', title: 'High Energy / Workout', color: 'from-red-600 to-orange-800' },
-              { id: 'party', title: 'Weekend Party', color: 'from-pink-600 to-rose-900' },
-              { id: 'sleep', title: 'Sleep & Relaxation', color: 'from-indigo-800 to-slate-900' },
-              { id: 'gaming', title: 'Synth & Gaming', color: 'from-cyan-600 to-blue-900' },
-            ],
-          },
-        });
-      }
-
       // Fallback 404
       return json({ success: false, message: 'Route not found on AuraStream Edge API', path: url.pathname }, 404);
     } catch (err: any) {
@@ -1262,3 +1243,4 @@ export default {
     }
   },
 };
+

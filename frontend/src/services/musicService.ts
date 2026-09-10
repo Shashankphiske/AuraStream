@@ -118,9 +118,9 @@ async function directYouTubeSearch(query: string, limit = 25): Promise<ITrack[]>
 
   // 2. Invidious Public Instances Fallback
   const mirrors = [
+    'https://invidious.flokinet.to/api/v1/search',
     'https://inv.nadeko.net/api/v1/search',
     'https://invidious.nerdvpn.de/api/v1/search',
-    'https://yt.artemislena.eu/api/v1/search',
   ];
   for (const mirror of mirrors) {
     try {
