@@ -586,14 +586,25 @@ export default {
       // 7. RECOMMENDATIONS
       if (path === '/recommendations/home' && method === 'GET') {
         const user = await getAuthUser(request, env);
-        const tracks = await env.DB.prepare('SELECT * FROM tracks').all();
-        const allTracks: any[] = tracks.results || [];
+        let allTracks: any[] = [];
+        if (env.DB) {
+          const tracks = await env.DB.prepare('SELECT * FROM tracks ORDER BY views DESC LIMIT 30').all();
+          allTracks = tracks.results || [];
+        }
+
+        // If catalog is small or only seed data, augment with live YouTube trending music
+        if (allTracks.length < 15) {
+          const liveYt = await searchYouTube('top music hits 2025 trending songs', 15, env.YOUTUBE_API_KEY);
+          if (liveYt.length > 0) {
+            allTracks = [...liveYt, ...allTracks];
+          }
+        }
 
         const jumpBackIn = allTracks.slice(0, 5);
-        const trending = allTracks.slice(0, 8);
+        const trending = allTracks.slice(0, 10);
         const synthwaveTracks = allTracks.filter(t => t.genre === 'Synthwave' || t.genre === 'Electronic');
         const lofiTracks = allTracks.filter(t => t.genre === 'Lo-Fi' || t.genre === 'Ambient');
-        const popTracks = allTracks.filter(t => t.genre === 'Pop' || t.genre === 'Hip-Hop');
+        const popTracks = allTracks.filter(t => t.genre === 'Pop' || t.genre === 'Hip-Hop' || t.genre === 'Music');
 
         const madeForYou = [
           {
@@ -620,9 +631,9 @@ export default {
         ];
 
         const recommendedGenres = [
-          { genre: 'Synthwave', tracks: synthwaveTracks },
-          { genre: 'Lo-Fi', tracks: lofiTracks },
-          { genre: 'Pop', tracks: popTracks },
+          { genre: 'Synthwave', tracks: synthwaveTracks.length ? synthwaveTracks : allTracks.slice(0, 4) },
+          { genre: 'Lo-Fi', tracks: lofiTracks.length ? lofiTracks : allTracks.slice(1, 5) },
+          { genre: 'Pop', tracks: popTracks.length ? popTracks : allTracks.slice(2, 6) },
         ];
 
         return json({

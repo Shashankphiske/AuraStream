@@ -52,7 +52,15 @@ export const SearchPage: React.FC = () => {
     <div className="space-y-8">
       {/* 1. Large Search Bar */}
       <div className="max-w-2xl space-y-3">
-        <div className="relative">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            const trimmed = query.trim();
+            setDebouncedQuery(trimmed);
+            if (trimmed) setSearchParams({ q: trimmed });
+          }}
+          className="relative"
+        >
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
           <input
             type="text"
@@ -67,7 +75,7 @@ export const SearchPage: React.FC = () => {
               <div className="w-4 h-4 rounded-full border-2 border-white/60 border-t-transparent animate-spin" />
             </div>
           )}
-        </div>
+        </form>
 
         {/* Filter Chips */}
         {hasQuery && (
