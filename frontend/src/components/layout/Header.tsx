@@ -56,10 +56,10 @@ export const Header: React.FC = () => {
   }, []);
 
   return (
-    <header className="sticky top-0 z-20 h-16 bg-[#09090b]/80 backdrop-blur-md border-b border-zinc-850 px-6 flex items-center justify-between">
-      {/* 1. Navigation & Search Bar (Left) */}
-      <div className="flex items-center gap-4 flex-1 max-w-xl">
-        <div className="flex items-center gap-1">
+    <header className="sticky top-0 z-20 bg-[#09090b]/95 backdrop-blur-md border-b border-zinc-850 px-3 sm:px-6 py-2.5 md:py-0 md:h-16 flex flex-col md:flex-row md:items-center md:justify-between gap-2.5 md:gap-4 transition-all">
+      {/* 1. Top Row on Mobile / Left on Desktop: Navigation & Search Bar */}
+      <div className="flex items-center gap-2 sm:gap-4 w-full md:w-auto flex-1 md:max-w-xl">
+        <div className="flex items-center gap-1 flex-shrink-0">
           <button
             onClick={() => navigate(-1)}
             aria-label="Back"
@@ -77,7 +77,7 @@ export const Header: React.FC = () => {
         </div>
 
         {/* Global Search Bar */}
-        <form onSubmit={handleSearchSubmit} className="relative flex-1 max-w-md">
+        <form onSubmit={handleSearchSubmit} className="relative flex-1">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
           <input
             type="text"
@@ -100,8 +100,8 @@ export const Header: React.FC = () => {
         </form>
       </div>
 
-      {/* 2. User Actions (Right) */}
-      <div className="flex items-center gap-2.5">
+      {/* 2. Below Search Bar on Mobile / Right on Desktop: APK, Sign In, Sign Up */}
+      <div className="flex items-center justify-between md:justify-end gap-2 w-full md:w-auto pt-1 md:pt-0 border-t border-zinc-850/60 md:border-t-0">
         {/* Quick App Download Link */}
         <button
           onClick={() => navigate('/download')}
@@ -109,7 +109,7 @@ export const Header: React.FC = () => {
           title="Download AuraStream for Android"
         >
           <Smartphone className="w-3.5 h-3.5 text-emerald-400" />
-          <span className="hidden sm:inline">Get App</span>
+          <span>Get App</span>
           <span className="text-[10px] bg-emerald-500/30 px-1 py-0.2 rounded text-emerald-200">APK</span>
         </button>
 
@@ -117,16 +117,16 @@ export const Header: React.FC = () => {
           <div className="relative" ref={dropdownRef}>
             <button
               onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-              className="flex items-center gap-2.5 p-1.5 pr-3 rounded-full bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 transition-colors cursor-pointer"
+              className="flex items-center gap-2 p-1.5 pr-2.5 rounded-full bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 transition-colors cursor-pointer"
             >
-              <div className="w-7 h-7 rounded-full overflow-hidden bg-white text-black flex items-center justify-center text-xs font-bold">
+              <div className="w-6 h-6 rounded-full overflow-hidden bg-white text-black flex items-center justify-center text-xs font-bold">
                 {user.avatar ? (
                   <img src={user.avatar} alt={user.name} className="w-full h-full object-cover" />
                 ) : (
                   user.name.charAt(0).toUpperCase()
                 )}
               </div>
-              <span className="text-xs font-medium text-zinc-200 max-w-[100px] truncate hidden sm:inline">
+              <span className="text-xs font-medium text-zinc-200 max-w-[110px] sm:max-w-[130px] truncate">
                 {user.name}
               </span>
             </button>
@@ -190,7 +190,7 @@ export const Header: React.FC = () => {
             <button
               onClick={() => openModal('compliance')}
               title="YouTube API Policies & Terms"
-              className="p-2 rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
+              className="p-1.5 rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
             >
               <Info className="w-4 h-4" />
             </button>
@@ -198,6 +198,7 @@ export const Header: React.FC = () => {
               variant="ghost"
               size="sm"
               onClick={() => openModal('login')}
+              className="text-xs px-3 py-1.5"
             >
               Sign In
             </Button>
@@ -205,6 +206,7 @@ export const Header: React.FC = () => {
               variant="primary"
               size="sm"
               onClick={() => openModal('register')}
+              className="text-xs px-3.5 py-1.5"
             >
               Sign Up
             </Button>
