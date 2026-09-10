@@ -20,6 +20,7 @@ import {
   Radio,
   Wifi,
   HardDrive,
+  X,
 } from 'lucide-react';
 import { usePlayerStore } from '../../store/usePlayerStore';
 import { useRoomStore } from '../../store/useRoomStore';
@@ -63,13 +64,22 @@ export const GlobalPlayer: React.FC = () => {
     toggleVideoMode,
     toggleQueue,
     toggleLyrics,
+    closePlayer,
   } = usePlayerStore();
 
-  const { currentRoom, isHost, broadcastSync } = useRoomStore();
+  const { currentRoom, isHost, broadcastSync, leaveRoom } = useRoomStore();
   const { isPartyActive, partyCode, broadcastPlayback } = useHotspotStore();
   const [isLiked, setIsLiked] = useState(false);
 
   if (!currentTrack) return null;
+
+  const handleClosePlayer = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    closePlayer();
+    if (currentRoom) {
+      leaveRoom();
+    }
+  };
 
   const handleLike = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -290,6 +300,15 @@ export const GlobalPlayer: React.FC = () => {
             <Play className="w-4 h-4 fill-current ml-0.5" />
           )}
         </button>
+
+        <button
+          onClick={handleClosePlayer}
+          title="Close Player"
+          aria-label="Close Player"
+          className="p-1.5 rounded-full text-zinc-400 hover:text-rose-400 hover:bg-white/5 transition-colors cursor-pointer"
+        >
+          <X className="w-4 h-4" />
+        </button>
       </div>
 
       {/* 2. Controls & Scrubber (Desktop Center) */}
@@ -447,6 +466,16 @@ export const GlobalPlayer: React.FC = () => {
             className="w-20 h-1 bg-zinc-800 rounded-full appearance-none outline-none accent-white cursor-pointer group-hover:bg-zinc-700 transition-colors"
           />
         </div>
+
+        {/* Close Player */}
+        <button
+          onClick={handleClosePlayer}
+          title="Close Player"
+          aria-label="Close Player"
+          className="p-2 rounded-full text-zinc-400 hover:text-rose-400 hover:bg-white/5 transition-colors cursor-pointer"
+        >
+          <X className="w-4 h-4" />
+        </button>
       </div>
     </div>
   );

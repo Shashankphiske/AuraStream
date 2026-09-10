@@ -27,6 +27,7 @@ interface RoomState {
 // Global Cross-Tab Sync Channel
 let syncChannel: BroadcastChannel | null = null;
 let pollTimer: any = null;
+let lastSyncedYtId: string | null = null;
 
 export const useRoomStore = create<RoomState>((set, get) => ({
   currentRoom: null,
@@ -67,6 +68,7 @@ export const useRoomStore = create<RoomState>((set, get) => ({
         if (!amHost) {
           if (payload.type === 'PLAY') {
             if (payload.track && player.currentTrack?.youtube_id !== payload.track.youtube_id) {
+              lastSyncedYtId = payload.track.youtube_id;
               player.playTrack(payload.track);
             } else {
               player.setPlaying(true);
@@ -86,6 +88,7 @@ export const useRoomStore = create<RoomState>((set, get) => ({
           } else if (payload.type === 'SEEK' && typeof payload.playbackTime === 'number') {
             player.seekTo(payload.playbackTime);
           } else if (payload.type === 'NEXT_TRACK' && payload.track) {
+            lastSyncedYtId = payload.track.youtube_id;
             player.playTrack(payload.track);
           }
         }
@@ -110,6 +113,7 @@ export const useRoomStore = create<RoomState>((set, get) => ({
 
     // If room has an initial track and user is joining, sync player cleanly
     const incomingYt = room.youtube_id || (room.current_track_id && room.current_track_id.length === 11 ? room.current_track_id : null);
+    lastSyncedYtId = incomingYt;
     if (incomingYt) {
       const player = usePlayerStore.getState();
       const currentTrack = player.currentTrack;
@@ -148,6 +152,8 @@ export const useRoomStore = create<RoomState>((set, get) => ({
       clearInterval(pollTimer);
       pollTimer = null;
     }
+    lastSyncedYtId = null;
+    usePlayerStore.getState().closePlayer();
     set({
       currentRoom: null,
       members: [],
@@ -301,8 +307,9 @@ export const useRoomStore = create<RoomState>((set, get) => ({
         const incomingTrackId = data.room.track_id || data.room.current_track_id;
         const incomingYtId = data.room.youtube_id || (incomingTrackId && incomingTrackId.length === 11 ? incomingTrackId : null);
 
-        // 1. Synchronize track ONLY IF a different track is received
-        if (incomingYtId && (!player.currentTrack || player.currentTrack.youtube_id !== incomingYtId)) {
+        // 1. Synchronize track ONLY IF a NEW track is received from host
+        if (incomingYtId && incomingYtId !== lastSyncedYtId) {
+          lastSyncedYtId = incomingYtId;
           const newTrack: ITrack = {
             id: incomingTrackId || incomingYtId,
             youtube_id: incomingYtId,
@@ -315,8 +322,8 @@ export const useRoomStore = create<RoomState>((set, get) => ({
           if (expectedTime > 0 && expectedTime < (newTrack.duration || 180) - 5) {
             player.seekTo(expectedTime);
           }
-        } else {
-          // 2. Synchronize play/pause
+        } else if (player.currentTrack && player.currentTrack.youtube_id === incomingYtId) {
+          // 2. Synchronize play/pause only if player is active
           if (player.isPlaying !== roomIsPlaying) {
             player.setPlaying(roomIsPlaying);
           }

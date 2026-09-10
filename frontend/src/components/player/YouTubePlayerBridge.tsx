@@ -43,6 +43,7 @@ export const YouTubePlayerBridge: React.FC = () => {
     toggleVideoMode,
     togglePipMinimized,
     setPlaybackNotice,
+    closePlayer,
   } = usePlayerStore();
 
   // 1. Initialize YouTube IFrame API
@@ -156,7 +157,18 @@ export const YouTubePlayerBridge: React.FC = () => {
 
   // 2. Handle Track change (YouTube or Local HTML5 Audio)
   useEffect(() => {
-    if (!currentTrack) return;
+    if (!currentTrack) {
+      if (playerRef.current && isReadyRef.current && playerRef.current.pauseVideo) {
+        try {
+          playerRef.current.pauseVideo();
+        } catch {}
+      }
+      if (localAudioRef.current) {
+        localAudioRef.current.pause();
+      }
+      setPlaybackNotice(null);
+      return;
+    }
 
     if (currentTrack.is_local) {
       if (playerRef.current && isReadyRef.current && playerRef.current.pauseVideo) {
@@ -383,6 +395,15 @@ export const YouTubePlayerBridge: React.FC = () => {
                 <Minimize2 className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">Mini Dock</span>
               </button>
+
+              <button
+                onClick={() => closePlayer()}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 text-xs font-medium backdrop-blur-md transition-colors cursor-pointer"
+                title="Close Player"
+              >
+                <X className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Close</span>
+              </button>
             </div>
           </div>
         )}
@@ -432,6 +453,14 @@ export const YouTubePlayerBridge: React.FC = () => {
               >
                 <ChevronDown className="w-3.5 h-3.5" />
               </button>
+
+              <button
+                onClick={() => closePlayer()}
+                title="Close Player"
+                className="p-1 rounded-md text-zinc-400 hover:text-rose-400 transition-colors cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
             </div>
           </div>
         )}
@@ -456,6 +485,13 @@ export const YouTubePlayerBridge: React.FC = () => {
               className="p-1 text-zinc-300 hover:text-white cursor-pointer"
             >
               <ChevronUp className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => closePlayer()}
+              title="Close Player"
+              className="p-1 text-zinc-300 hover:text-rose-400 cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5" />
             </button>
           </div>
         )}

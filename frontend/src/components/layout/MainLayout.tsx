@@ -22,7 +22,7 @@ export const MainLayout: React.FC = () => {
   }, []);
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[#07080e] text-slate-100">
+    <div className="flex h-[100dvh] w-screen overflow-hidden bg-[#07080e] text-slate-100">
       {/* Desktop Sidebar */}
       <div className="hidden md:flex">
         <Sidebar />
@@ -32,7 +32,7 @@ export const MainLayout: React.FC = () => {
       <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
         <Header />
         
-        <main className="flex-1 overflow-y-auto pb-32 md:pb-28 px-4 md:px-8 py-6">
+        <main className="flex-1 overflow-y-auto overscroll-y-contain pb-36 md:pb-28 px-4 md:px-8 py-6">
           <Outlet />
         </main>
       </div>

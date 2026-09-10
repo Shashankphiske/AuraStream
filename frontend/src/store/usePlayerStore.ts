@@ -45,6 +45,7 @@ interface PlayerState {
   setPlaybackNotice: (notice: { code: number; message: string; videoId: string } | null) => void;
   toggleQueue: () => void;
   toggleLyrics: () => void;
+  closePlayer: () => void;
 }
 
 // Load initial volume from localStorage if available
@@ -219,4 +220,17 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   toggleQueue: () => set((state) => ({ isQueueOpen: !state.isQueueOpen })),
 
   toggleLyrics: () => set((state) => ({ isLyricsOpen: !state.isLyricsOpen })),
+
+  closePlayer: () =>
+    set({
+      currentTrack: null,
+      isPlaying: false,
+      currentTime: 0,
+      duration: 0,
+      seekTarget: null,
+      isVideoMode: false,
+      playbackNotice: null,
+      isQueueOpen: false,
+      isLyricsOpen: false,
+    }),
 }));

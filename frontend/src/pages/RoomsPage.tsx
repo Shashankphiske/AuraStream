@@ -114,33 +114,110 @@ export const RoomsPage: React.FC = () => {
   };
 
   return (
-    <div className="space-y-8 max-w-6xl mx-auto">
-      {/* 1. Header Banner */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-zinc-850">
-        <div>
-          <div className="flex items-center gap-2.5 mb-1">
-            <Radio className="w-5 h-5 text-white" />
-            <h1 className="text-2xl md:text-3xl font-bold text-white tracking-tight font-heading">
-              Listen Together
+    <div className="space-y-8 max-w-6xl mx-auto pb-12 relative">
+      {/* Mobile Floating Host Room Action Button (FAB) */}
+      <button
+        onClick={() => {
+          if (!isAuthenticated) {
+            openModal('login');
+            return;
+          }
+          setIsCreateModalOpen(true);
+        }}
+        className="fixed bottom-24 right-4 z-40 md:hidden flex items-center gap-2 px-4 py-3 rounded-full bg-gradient-to-r from-rose-500 via-pink-500 to-purple-600 text-white font-bold text-xs shadow-2xl shadow-rose-500/60 hover:scale-105 active:scale-95 transition-all border border-white/30 cursor-pointer animate-in fade-in slide-in-from-bottom-4 duration-300"
+        title="Host a Session"
+      >
+        <Plus className="w-4 h-4 text-white" />
+        <span className="tracking-wide">Host Room</span>
+      </button>
+
+      {/* 1. Hero Action Banner */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-rose-950/40 via-zinc-900/90 to-purple-950/30 border border-rose-500/25 p-5 md:p-8 shadow-2xl">
+        {/* Glow ambient decoration */}
+        <div className="absolute -top-24 -right-24 w-64 h-64 bg-rose-500/15 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-purple-500/15 rounded-full blur-3xl pointer-events-none" />
+
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+          <div className="space-y-3 max-w-xl">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30 text-[11px] font-bold uppercase tracking-wider">
+                <Radio className="w-3.5 h-3.5 text-rose-400 animate-pulse" />
+                <span>Live Streaming Rooms</span>
+              </span>
+              <span className="text-[11px] text-zinc-400 font-medium hidden sm:inline">
+                • Synchronized Music & Voice
+              </span>
+            </div>
+
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-white tracking-tight font-heading leading-tight">
+              Listen Together in Real-Time Sync
             </h1>
+
+            <p className="text-xs sm:text-sm text-zinc-300 leading-relaxed">
+              Host your own listening room, invite your circle, queue songs collaboratively, or join public sessions with live chat.
+            </p>
           </div>
-          <p className="text-xs text-zinc-400">
-            Create listening rooms with friends, share queues, and stream in synchronized harmony.
-          </p>
+
+          {/* Quick Primary Actions */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full lg:w-auto">
+            <button
+              onClick={() => {
+                if (!isAuthenticated) {
+                  openModal('login');
+                  return;
+                }
+                setIsCreateModalOpen(true);
+              }}
+              className="flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-gradient-to-r from-rose-500 via-pink-500 to-purple-600 hover:from-rose-400 hover:to-purple-500 text-white font-bold text-sm shadow-lg shadow-rose-500/30 hover:shadow-rose-500/50 hover:scale-[1.02] active:scale-95 transition-all cursor-pointer border border-white/20"
+            >
+              <Plus className="w-4 h-4 stroke-[2.5]" />
+              <span>Host a Room</span>
+            </button>
+
+            {/* Quick Code Join Form */}
+            <form onSubmit={handleJoinByCode} className="flex items-center gap-1.5 p-1 rounded-2xl bg-zinc-950/80 border border-zinc-800">
+              <input
+                type="text"
+                value={roomCodeInput}
+                onChange={(e) => setRoomCodeInput(e.target.value)}
+                placeholder="ROOM CODE"
+                maxLength={10}
+                className="w-28 sm:w-32 px-3 py-2 bg-transparent text-white placeholder-zinc-500 text-xs uppercase font-mono tracking-widest outline-none text-center"
+              />
+              <button
+                type="submit"
+                className="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+              >
+                <span>Join</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </form>
+          </div>
         </div>
 
-        {/* Tab Selector */}
-        <div className="flex items-center gap-1.5 p-1 rounded-xl bg-zinc-900 border border-zinc-800 self-start md:self-auto">
+        {codeError && (
+          <p className="text-xs text-rose-400 mt-3 font-medium bg-rose-500/10 border border-rose-500/20 px-3 py-1.5 rounded-xl self-start inline-block">
+            ⚠️ {codeError}
+          </p>
+        )}
+      </div>
+
+      {/* 2. Navigation Tab Selector */}
+      <div className="flex items-center justify-between gap-4 pb-1 border-b border-zinc-850">
+        <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-zinc-900 border border-zinc-800">
           <button
             onClick={() => setActiveTab('rooms')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               activeTab === 'rooms'
-                ? 'bg-white text-black shadow-sm'
+                ? 'bg-white text-black shadow-md'
                 : 'text-zinc-400 hover:text-white'
             }`}
           >
             <Radio className="w-3.5 h-3.5" />
             <span>Live Sessions</span>
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${activeTab === 'rooms' ? 'bg-black/15 text-black' : 'bg-zinc-800 text-zinc-400'}`}>
+              {rooms.length}
+            </span>
           </button>
 
           <button
@@ -151,19 +228,33 @@ export const RoomsPage: React.FC = () => {
               }
               setActiveTab('friends');
             }}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               activeTab === 'friends'
-                ? 'bg-white text-black shadow-sm'
+                ? 'bg-white text-black shadow-md'
                 : 'text-zinc-400 hover:text-white'
             }`}
           >
             <Users className="w-3.5 h-3.5" />
             <span>Friends</span>
             {friendsData?.pendingIncoming && friendsData.pendingIncoming.length > 0 && (
-              <span className="w-2 h-2 rounded-full bg-rose-500" />
+              <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
             )}
           </button>
         </div>
+
+        <button
+          onClick={() => {
+            if (!isAuthenticated) {
+              openModal('login');
+              return;
+            }
+            setIsCreateModalOpen(true);
+          }}
+          className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-800/80 hover:bg-zinc-750 text-zinc-300 hover:text-white border border-zinc-700/60 text-xs font-semibold transition-colors cursor-pointer"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          <span>New Session</span>
+        </button>
       </div>
 
       {/* TAB 1: LIVE ROOMS */}
@@ -227,8 +318,25 @@ export const RoomsPage: React.FC = () => {
           {/* Active Rooms Grid */}
           <div>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-white tracking-tight">Active Rooms</h3>
-              <span className="text-xs text-zinc-500">{rooms.length} live session{rooms.length !== 1 ? 's' : ''}</span>
+              <div>
+                <h3 className="text-lg font-bold text-white tracking-tight">Active Rooms</h3>
+                <span className="text-xs text-zinc-500">{rooms.length} live session{rooms.length !== 1 ? 's' : ''}</span>
+              </div>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  if (!isAuthenticated) {
+                    openModal('login');
+                    return;
+                  }
+                  setIsCreateModalOpen(true);
+                }}
+                className="flex items-center gap-1.5 md:hidden"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Create</span>
+              </Button>
             </div>
 
             {roomsLoading ? (
