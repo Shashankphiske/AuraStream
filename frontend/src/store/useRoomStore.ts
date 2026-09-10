@@ -12,11 +12,14 @@ interface RoomState {
   isHost: boolean;
   activeReaction: { emoji: string; id: number } | null;
   isChatOpen: boolean;
+  isLocallyPaused: boolean;
 
   // Actions
   setRoom: (room: IRoom, members: IRoomMember[], queue: IRoomQueueItem[], messages: IRoomMessage[], forceIsHost?: boolean) => void;
   leaveRoom: () => void;
   toggleChat: () => void;
+  setLocallyPaused: (paused: boolean) => void;
+  resumeAndSyncWithRoom: () => Promise<void>;
   broadcastSync: (type: IRoomSyncEvent['type'], data?: { track?: ITrack | null; isPlaying?: boolean; time?: number }) => void;
   addTrackToQueue: (track: ITrack) => Promise<void>;
   sendMessage: (content: string, type?: 'chat' | 'reaction' | 'system') => Promise<void>;
@@ -37,6 +40,61 @@ export const useRoomStore = create<RoomState>((set, get) => ({
   isHost: false,
   activeReaction: null,
   isChatOpen: false,
+  isLocallyPaused: false,
+
+  setLocallyPaused: (paused: boolean) => {
+    set({ isLocallyPaused: paused });
+  },
+
+  resumeAndSyncWithRoom: async () => {
+    const { currentRoom } = get();
+    if (!currentRoom) return;
+
+    set({ isLocallyPaused: false });
+
+    try {
+      // Fetch the latest room state from server for high precision timeline sync
+      const data = await roomService.getRoom(currentRoom.id || currentRoom.code);
+      const room = data?.room || currentRoom;
+      const player = usePlayerStore.getState();
+
+      const incomingTrackId = room.track_id || room.current_track_id;
+      const incomingYtId = room.youtube_id || (incomingTrackId && incomingTrackId.length === 11 ? incomingTrackId : null);
+
+      const now = Date.now();
+      const lastSync = Number(room.last_sync_time) || now;
+      const syncAge = (now - lastSync) / 1000;
+      const effectiveLatency = (room.is_playing && syncAge >= 0 && syncAge <= 30) ? syncAge : 0;
+      const targetLiveTime = Math.max(0, (Number(room.playback_time) || 0) + effectiveLatency);
+
+      if (incomingYtId) {
+        lastSyncedYtId = incomingYtId;
+        const targetTrack: ITrack = {
+          id: incomingTrackId || incomingYtId,
+          youtube_id: incomingYtId,
+          title: room.track_title || 'Room Song',
+          artist: room.track_artist || 'AuraStream Artist',
+          thumbnail_url: room.track_thumbnail || '',
+          duration: Number(room.track_duration) || 180,
+        };
+
+        if (!player.currentTrack || player.currentTrack.youtube_id !== incomingYtId) {
+          player.playTrack(targetTrack);
+        }
+
+        const trackDuration = targetTrack.duration || 180;
+        if (targetLiveTime > 0 && targetLiveTime < trackDuration) {
+          player.seekTo(targetLiveTime);
+        }
+        player.setPlaying(Boolean(room.is_playing !== false));
+      } else {
+        player.setPlaying(true);
+      }
+    } catch {
+      const player = usePlayerStore.getState();
+      player.setPlaying(true);
+    }
+  },
 
   setRoom: (room, members, queue, messages, forceIsHost) => {
     const authUser = useAuthStore.getState().user;
@@ -64,32 +122,39 @@ export const useRoomStore = create<RoomState>((set, get) => ({
         }
 
         // Listener sync execution
-        const { isHost: amHost } = get();
+        const { isHost: amHost, isLocallyPaused } = get();
         if (!amHost) {
-          if (payload.type === 'PLAY') {
-            if (payload.track && player.currentTrack?.youtube_id !== payload.track.youtube_id) {
+          if (isLocallyPaused) {
+            // User paused locally — do not auto-play or seek, but keep queue updated
+            if (payload.type === 'NEXT_TRACK' && payload.track) {
+              lastSyncedYtId = payload.track.youtube_id;
+            }
+          } else {
+            if (payload.type === 'PLAY') {
+              if (payload.track && player.currentTrack?.youtube_id !== payload.track.youtube_id) {
+                lastSyncedYtId = payload.track.youtube_id;
+                player.playTrack(payload.track);
+              } else {
+                player.setPlaying(true);
+              }
+              if (typeof payload.playbackTime === 'number') {
+                const latencyAdjustment = (Date.now() - payload.timestamp) / 1000;
+                const targetTime = payload.playbackTime + latencyAdjustment;
+                if (Math.abs(player.currentTime - targetTime) > 1.5) {
+                  player.seekTo(targetTime);
+                }
+              }
+            } else if (payload.type === 'PAUSE') {
+              player.setPlaying(false);
+              if (typeof payload.playbackTime === 'number') {
+                player.seekTo(payload.playbackTime);
+              }
+            } else if (payload.type === 'SEEK' && typeof payload.playbackTime === 'number') {
+              player.seekTo(payload.playbackTime);
+            } else if (payload.type === 'NEXT_TRACK' && payload.track) {
               lastSyncedYtId = payload.track.youtube_id;
               player.playTrack(payload.track);
-            } else {
-              player.setPlaying(true);
             }
-            if (typeof payload.playbackTime === 'number') {
-              const latencyAdjustment = (Date.now() - payload.timestamp) / 1000;
-              const targetTime = payload.playbackTime + latencyAdjustment;
-              if (Math.abs(player.currentTime - targetTime) > 1.5) {
-                player.seekTo(targetTime);
-              }
-            }
-          } else if (payload.type === 'PAUSE') {
-            player.setPlaying(false);
-            if (typeof payload.playbackTime === 'number') {
-              player.seekTo(payload.playbackTime);
-            }
-          } else if (payload.type === 'SEEK' && typeof payload.playbackTime === 'number') {
-            player.seekTo(payload.playbackTime);
-          } else if (payload.type === 'NEXT_TRACK' && payload.track) {
-            lastSyncedYtId = payload.track.youtube_id;
-            player.playTrack(payload.track);
           }
         }
 
@@ -104,6 +169,7 @@ export const useRoomStore = create<RoomState>((set, get) => ({
       queue,
       messages,
       isHost,
+      isLocallyPaused: false,
     });
 
     // Start background sync polling every 2.5 seconds
@@ -160,6 +226,7 @@ export const useRoomStore = create<RoomState>((set, get) => ({
       queue: [],
       messages: [],
       isHost: false,
+      isLocallyPaused: false,
     });
   },
 
@@ -294,6 +361,22 @@ export const useRoomStore = create<RoomState>((set, get) => ({
 
       // Listeners synchronize to host's playhead without reload thrashing
       if (!isHost) {
+        const { isLocallyPaused } = get();
+
+        if (isLocallyPaused) {
+          // If the user deliberately stopped / paused locally, keep room meta updated without force-playing audio
+          set({
+            queue: data.queue || [],
+            members: data.members || [],
+            messages: data.messages || [],
+            currentRoom: {
+              ...currentRoom,
+              ...data.room,
+            },
+          });
+          return;
+        }
+
         const roomIsPlaying = Boolean(data.room.is_playing);
         const roomPlaybackTime = Number(data.room.playback_time) || 0;
         const now = Date.now();
@@ -344,6 +427,10 @@ export const useRoomStore = create<RoomState>((set, get) => ({
         queue: data.queue || [],
         members: data.members || [],
         messages: data.messages || [],
+        currentRoom: {
+          ...currentRoom,
+          ...data.room,
+        },
       });
     } catch {}
   },

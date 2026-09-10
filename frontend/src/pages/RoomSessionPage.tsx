@@ -64,6 +64,9 @@ export const RoomSessionPage: React.FC = () => {
     messages,
     isHost,
     activeReaction,
+    isLocallyPaused,
+    setLocallyPaused,
+    resumeAndSyncWithRoom,
     setRoom,
     leaveRoom,
     broadcastSync,
@@ -582,9 +585,21 @@ export const RoomSessionPage: React.FC = () => {
 
           {/* Track Metadata & Synced Player Controls */}
           <div className="flex-1 text-center md:text-left space-y-3 min-w-0">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-zinc-800/80 border border-zinc-700/60 text-xs text-zinc-300">
-              <Volume2 className="w-3.5 h-3.5 text-zinc-400" />
-              <span>Playing in Room</span>
+            <div className="flex items-center gap-2 flex-wrap justify-center md:justify-start">
+              <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold ${
+                isLocallyPaused || !isPlaying
+                  ? 'bg-amber-500/15 border border-amber-500/30 text-amber-300'
+                  : 'bg-zinc-800/80 border border-zinc-700/60 text-zinc-300'
+              }`}>
+                <Volume2 className={`w-3.5 h-3.5 ${isLocallyPaused || !isPlaying ? 'text-amber-400' : 'text-emerald-400'}`} />
+                <span>{isLocallyPaused ? 'Local Playback Stopped / Paused' : isPlaying ? 'Playing Live in Room' : 'Room Stream Paused'}</span>
+              </div>
+
+              {isLocallyPaused && (
+                <span className="text-[11px] text-amber-400/90 font-medium">
+                  • Click Resume to catch up with latest room timeline
+                </span>
+              )}
             </div>
 
             <h3 className="text-xl md:text-3xl font-bold text-white tracking-tight line-clamp-2">
@@ -609,7 +624,7 @@ export const RoomSessionPage: React.FC = () => {
 
             {/* Playback & Reaction Controls */}
             <div className="flex flex-wrap items-center justify-center md:justify-start gap-3 pt-2">
-              {canControl && (
+              {canControl ? (
                 <>
                   <Button
                     variant="primary"
@@ -618,7 +633,7 @@ export const RoomSessionPage: React.FC = () => {
                     className="flex items-center gap-2"
                   >
                     {isPlaying ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current ml-0.5" />}
-                    <span>{isPlaying ? 'Pause Sync' : 'Play Sync'}</span>
+                    <span>{isPlaying ? 'Pause Sync (All)' : 'Play Sync (All)'}</span>
                   </Button>
 
                   <Button
@@ -630,6 +645,35 @@ export const RoomSessionPage: React.FC = () => {
                     <SkipForward className="w-4 h-4" />
                     <span>Skip Track</span>
                   </Button>
+                </>
+              ) : (
+                /* Listener Individual Controls */
+                <>
+                  {isLocallyPaused || !isPlaying ? (
+                    <Button
+                      variant="primary"
+                      size="md"
+                      onClick={resumeAndSyncWithRoom}
+                      className="flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-black font-bold shadow-lg shadow-emerald-500/25"
+                    >
+                      <Play className="w-4 h-4 fill-current ml-0.5" />
+                      <span>Resume & Catch Up Live Stream</span>
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="secondary"
+                      size="md"
+                      onClick={() => {
+                        setLocallyPaused(true);
+                        togglePlay();
+                      }}
+                      className="flex items-center gap-2 text-zinc-300 hover:text-white"
+                      title="Stop music streaming on your device only without affecting other listeners"
+                    >
+                      <Pause className="w-4 h-4 fill-current" />
+                      <span>Pause for Me</span>
+                    </Button>
+                  )}
                 </>
               )}
 

@@ -67,7 +67,15 @@ export const GlobalPlayer: React.FC = () => {
     closePlayer,
   } = usePlayerStore();
 
-  const { currentRoom, isHost, broadcastSync, leaveRoom } = useRoomStore();
+  const {
+    currentRoom,
+    isHost,
+    broadcastSync,
+    isLocallyPaused,
+    setLocallyPaused,
+    resumeAndSyncWithRoom,
+    leaveRoom,
+  } = useRoomStore();
   const { isPartyActive, partyCode, broadcastPlayback } = useHotspotStore();
   const [isLiked, setIsLiked] = useState(false);
 
@@ -75,9 +83,11 @@ export const GlobalPlayer: React.FC = () => {
 
   const handleClosePlayer = (e: React.MouseEvent) => {
     e.stopPropagation();
-    closePlayer();
     if (currentRoom) {
-      leaveRoom();
+      setLocallyPaused(true);
+      closePlayer();
+    } else {
+      closePlayer();
     }
   };
 
@@ -94,16 +104,26 @@ export const GlobalPlayer: React.FC = () => {
   };
 
   const handleTogglePlay = () => {
-    togglePlay();
     if (currentRoom) {
-      if (currentRoom.dj_mode === 'collaborative' || isHost) {
+      if (isHost || currentRoom.dj_mode === 'collaborative') {
+        togglePlay();
         broadcastSync(isPlaying ? 'PAUSE' : 'PLAY', {
           isPlaying: !isPlaying,
           time: currentTime,
           track: currentTrack,
         });
+      } else {
+        if (isPlaying) {
+          setLocallyPaused(true);
+          togglePlay();
+        } else {
+          resumeAndSyncWithRoom();
+        }
       }
+      return;
     }
+
+    togglePlay();
     if (isPartyActive) {
       broadcastPlayback(isPlaying ? 'PAUSE' : 'PLAY', {
         isPlaying: !isPlaying,
