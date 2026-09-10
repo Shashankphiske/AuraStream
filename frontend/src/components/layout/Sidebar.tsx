@@ -10,6 +10,7 @@ import {
   History,
   PlusSquare,
   ShieldCheck,
+  Smartphone,
 } from 'lucide-react';
 import { useRoomStore } from '../../store/useRoomStore';
 import { useAuthStore } from '../../store/useAuthStore';
@@ -90,6 +91,15 @@ export const Sidebar: React.FC = () => {
         <NavLink to="/library" className={navItemClass}>
           <Library className="w-4 h-4" />
           <span>Library</span>
+        </NavLink>
+        <NavLink to="/download" className={navItemClass}>
+          <Smartphone className="w-4 h-4 text-emerald-400" />
+          <span className="flex-1 flex items-center justify-between">
+            <span>Get App</span>
+            <span className="text-[9px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.5 rounded-full">
+              APK
+            </span>
+          </span>
         </NavLink>
       </div>
 

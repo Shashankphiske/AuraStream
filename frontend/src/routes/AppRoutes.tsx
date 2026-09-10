@@ -12,6 +12,7 @@ import { AdminPage } from '../pages/AdminPage';
 import { RoomsPage } from '../pages/RoomsPage';
 import { RoomSessionPage } from '../pages/RoomSessionPage';
 import { LocalMusicPage } from '../pages/LocalMusicPage';
+import { DownloadAppPage } from '../pages/DownloadAppPage';
 import { NotFoundPage } from '../pages/NotFoundPage';
 
 export const AppRoutes: React.FC = () => {
@@ -24,6 +25,7 @@ export const AppRoutes: React.FC = () => {
         <Route path="local" element={<LocalMusicPage />} />
         <Route path="rooms" element={<RoomsPage />} />
         <Route path="room/:code" element={<RoomSessionPage />} />
+        <Route path="download" element={<DownloadAppPage />} />
         <Route path="playlist/:id" element={<PlaylistPage />} />
         <Route path="track/:id" element={<TrackDetailPage />} />
         <Route path="favorites" element={<FavoritesPage />} />
