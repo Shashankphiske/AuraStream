@@ -1,0 +1,16 @@
+name = "aurastream-backend"
+main = "src/worker.ts"
+compatibility_date = "2024-11-01"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+
+[[d1_databases]]
+binding = "DB"
+database_name = "aurastream-db"
+database_id = "e3a92b62-9137-49a3-ad76-96a7020413e1"
+
+[vars]
+NODE_ENV = "production"
+CLIENT_URL = "https://your-app.netlify.app"
+JWT_ACCESS_EXPIRATION = "15m"
+JWT_REFRESH_EXPIRATION = "7d"
