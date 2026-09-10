@@ -67,55 +67,79 @@ export const CreateRoomModal: React.FC<CreateRoomModalProps> = ({ isOpen, onClos
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} maxWidth="md" title="Create Listen Together Room">
-      <form onSubmit={handleCreate} className="space-y-4">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      maxWidth="md"
+      title="Create Listen Together Room"
+      footer={
+        <div className="w-full flex items-center justify-end gap-2.5">
+          <Button variant="ghost" size="sm" type="button" onClick={onClose} className="text-xs">
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            size="md"
+            type="submit"
+            form="create-room-form"
+            isLoading={isLoading}
+            className="flex items-center gap-2 text-xs sm:text-sm shadow-lg shadow-violet-600/20"
+          >
+            <Radio className="w-4 h-4" />
+            <span>Launch Room</span>
+          </Button>
+        </div>
+      }
+    >
+      <form id="create-room-form" onSubmit={handleCreate} className="space-y-3.5 pb-2">
         {/* Network Mode (Online vs Offline Hotspot) */}
         <div>
-          <label className="block text-xs font-semibold text-zinc-300 uppercase tracking-wider mb-2">
+          <label className="block text-[11px] sm:text-xs font-semibold text-zinc-300 uppercase tracking-wider mb-1.5">
             Network Mode
           </label>
-          <div className="grid grid-cols-2 gap-2.5">
+          <div className="grid grid-cols-2 gap-2 sm:gap-2.5">
             <button
               type="button"
               onClick={() => setNetworkMode('online')}
-              className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+              className={`p-2.5 sm:p-3 rounded-xl border text-left transition-all cursor-pointer ${
                 networkMode === 'online'
-                  ? 'bg-zinc-800 border-zinc-500 text-white shadow-sm'
+                  ? 'bg-zinc-800 border-zinc-500 text-white shadow-sm ring-1 ring-white/10'
                   : 'bg-zinc-900/60 border-zinc-800/80 text-zinc-400 hover:text-white'
               }`}
             >
-              <div className="flex items-center gap-2 mb-1">
-                <Radio className="w-4 h-4 text-rose-400" />
+              <div className="flex items-center gap-1.5 mb-1">
+                <Radio className="w-3.5 h-3.5 text-rose-400" />
                 <span className="text-xs font-semibold">Online Edge Session</span>
               </div>
-              <p className="text-[11px] text-zinc-400 leading-tight">
-                Stream with friends anywhere in the world over the internet.
+              <p className="text-[10.5px] text-zinc-400 leading-tight">
+                Stream with friends anywhere over internet.
               </p>
             </button>
 
             <button
               type="button"
               onClick={() => setNetworkMode('hotspot')}
-              className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+              className={`p-2.5 sm:p-3 rounded-xl border text-left transition-all cursor-pointer ${
                 networkMode === 'hotspot'
-                  ? 'bg-emerald-950/40 border-emerald-500 text-white shadow-sm'
+                  ? 'bg-emerald-950/40 border-emerald-500 text-white shadow-sm ring-1 ring-emerald-500/20'
                   : 'bg-zinc-900/60 border-zinc-800/80 text-zinc-400 hover:text-white'
               }`}
             >
-              <div className="flex items-center gap-2 mb-1">
-                <Wifi className="w-4 h-4 text-emerald-400" />
-                <span className="text-xs font-semibold text-emerald-400">Wi-Fi Hotspot (Offline)</span>
+              <div className="flex items-center gap-1.5 mb-1">
+                <Wifi className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="text-xs font-semibold text-emerald-400">Wi-Fi Hotspot</span>
               </div>
-              <p className="text-[11px] text-zinc-400 leading-tight">
-                Stream local device music with friends on your mobile hotspot with zero data!
+              <p className="text-[10.5px] text-zinc-400 leading-tight">
+                Offline direct Wi-Fi hotspot with zero data!
               </p>
             </button>
           </div>
         </div>
 
+        {/* Room Name */}
         <div>
-          <label className="block text-xs font-semibold text-zinc-300 uppercase tracking-wider mb-1.5">
-            Room Name
+          <label className="block text-[11px] sm:text-xs font-semibold text-zinc-300 uppercase tracking-wider mb-1">
+            Room Name <span className="text-rose-400">*</span>
           </label>
           <input
             type="text"
@@ -123,12 +147,13 @@ export const CreateRoomModal: React.FC<CreateRoomModalProps> = ({ isOpen, onClos
             onChange={(e) => setName(e.target.value)}
             placeholder="e.g. Midnight Cyberpunk Session, Lo-Fi Chill Jam"
             required
-            className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-white placeholder-zinc-500 text-sm outline-none focus:border-zinc-500 transition-colors"
+            className="w-full px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-white placeholder-zinc-500 text-xs sm:text-sm outline-none focus:border-zinc-500 transition-colors"
           />
         </div>
 
+        {/* Vibe / Description */}
         <div>
-          <label className="block text-xs font-semibold text-zinc-300 uppercase tracking-wider mb-1.5">
+          <label className="block text-[11px] sm:text-xs font-semibold text-zinc-300 uppercase tracking-wider mb-1">
             Vibe / Description (Optional)
           </label>
           <input
@@ -136,48 +161,48 @@ export const CreateRoomModal: React.FC<CreateRoomModalProps> = ({ isOpen, onClos
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="What's the atmosphere of this session?"
-            className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-white placeholder-zinc-500 text-sm outline-none focus:border-zinc-500 transition-colors"
+            className="w-full px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-white placeholder-zinc-500 text-xs sm:text-sm outline-none focus:border-zinc-500 transition-colors"
           />
         </div>
 
         {/* DJ Mode Selector */}
         <div>
-          <label className="block text-xs font-semibold text-zinc-300 uppercase tracking-wider mb-2">
+          <label className="block text-[11px] sm:text-xs font-semibold text-zinc-300 uppercase tracking-wider mb-1.5">
             Playback Control (DJ Mode)
           </label>
-          <div className="grid grid-cols-2 gap-2.5">
+          <div className="grid grid-cols-2 gap-2 sm:gap-2.5">
             <button
               type="button"
               onClick={() => setDjMode('collaborative')}
-              className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+              className={`p-2.5 sm:p-3 rounded-xl border text-left transition-all cursor-pointer ${
                 djMode === 'collaborative'
-                  ? 'bg-zinc-800 border-zinc-600 text-white shadow-sm'
+                  ? 'bg-zinc-800 border-zinc-500 text-white shadow-sm ring-1 ring-white/10'
                   : 'bg-zinc-900/60 border-zinc-800/80 text-zinc-400 hover:text-white'
               }`}
             >
-              <div className="flex items-center gap-2 mb-1">
-                <Users className="w-4 h-4 text-white" />
+              <div className="flex items-center gap-1.5 mb-1">
+                <Users className="w-3.5 h-3.5 text-indigo-400" />
                 <span className="text-xs font-semibold">Collaborative</span>
               </div>
-              <p className="text-[11px] text-zinc-400 leading-tight">
-                All participants can add songs and vote on the queue.
+              <p className="text-[10.5px] text-zinc-400 leading-tight">
+                All participants can queue tracks and vote.
               </p>
             </button>
 
             <button
               type="button"
               onClick={() => setDjMode('host_only')}
-              className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+              className={`p-2.5 sm:p-3 rounded-xl border text-left transition-all cursor-pointer ${
                 djMode === 'host_only'
-                  ? 'bg-zinc-800 border-zinc-600 text-white shadow-sm'
+                  ? 'bg-zinc-800 border-zinc-500 text-white shadow-sm ring-1 ring-white/10'
                   : 'bg-zinc-900/60 border-zinc-800/80 text-zinc-400 hover:text-white'
               }`}
             >
-              <div className="flex items-center gap-2 mb-1">
-                <ShieldCheck className="w-4 h-4 text-white" />
+              <div className="flex items-center gap-1.5 mb-1">
+                <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
                 <span className="text-xs font-semibold">Host DJ Only</span>
               </div>
-              <p className="text-[11px] text-zinc-400 leading-tight">
+              <p className="text-[10.5px] text-zinc-400 leading-tight">
                 Only you control playback; guests listen in sync.
               </p>
             </button>
@@ -185,15 +210,15 @@ export const CreateRoomModal: React.FC<CreateRoomModalProps> = ({ isOpen, onClos
         </div>
 
         {/* Voice Audio Chat & Smart Ducking Toggle */}
-        <div className="p-3.5 rounded-xl bg-zinc-900/90 border border-zinc-800 flex items-center justify-between">
+        <div className="p-2.5 sm:p-3 rounded-xl bg-zinc-900/90 border border-zinc-800 flex items-center justify-between">
           <div className="flex items-center gap-2.5 min-w-0 pr-2">
-            <div className="w-8 h-8 rounded-lg bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center text-indigo-400 flex-shrink-0">
-              <Mic className="w-4 h-4" />
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center text-indigo-400 flex-shrink-0">
+              <Mic className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </div>
             <div className="min-w-0">
-              <p className="text-xs font-semibold text-white">Live Voice Audio Chat & Smart Ducking</p>
-              <p className="text-[11px] text-zinc-400 leading-tight">
-                Allows members to talk in real time with auto-ducked music volume.
+              <p className="text-xs font-semibold text-white">Live Voice Chat & Auto Ducking</p>
+              <p className="text-[10.5px] text-zinc-400 leading-tight">
+                Talk in real time; music auto-ducks when speaking.
               </p>
             </div>
           </div>
@@ -205,42 +230,56 @@ export const CreateRoomModal: React.FC<CreateRoomModalProps> = ({ isOpen, onClos
           />
         </div>
 
-        {/* Privacy Selector */}
+        {/* Visibility Selector */}
         <div>
-          <label className="block text-xs font-semibold text-zinc-300 uppercase tracking-wider mb-2">
-            Visibility
+          <label className="block text-[11px] sm:text-xs font-semibold text-zinc-300 uppercase tracking-wider mb-1.5">
+            Room Visibility
           </label>
-          <div className="flex items-center gap-4 text-xs text-zinc-300">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="radio"
-                checked={isPublic}
-                onChange={() => setIsPublic(true)}
-                className="accent-white"
-              />
-              <Globe className="w-3.5 h-3.5 text-zinc-400" />
-              <span>Public (Visible in Lobby)</span>
-            </label>
+          <div className="grid grid-cols-2 gap-2 sm:gap-2.5">
+            <button
+              type="button"
+              onClick={() => setIsPublic(true)}
+              className={`p-2.5 sm:p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                isPublic
+                  ? 'bg-zinc-800 border-zinc-500 text-white shadow-sm ring-1 ring-white/10'
+                  : 'bg-zinc-900/60 border-zinc-800/80 text-zinc-400 hover:text-white'
+              }`}
+            >
+              <div className="flex items-center gap-1.5 mb-1">
+                <Globe className="w-3.5 h-3.5 text-blue-400" />
+                <span className="text-xs font-semibold">Public Room</span>
+              </div>
+              <p className="text-[10.5px] text-zinc-400 leading-tight">
+                Visible in Lobby for anyone to discover.
+              </p>
+            </button>
 
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="radio"
-                checked={!isPublic}
-                onChange={() => setIsPublic(false)}
-                className="accent-white"
-              />
-              <Lock className="w-3.5 h-3.5 text-zinc-400" />
-              <span>Invite & Code Only</span>
-            </label>
+            <button
+              type="button"
+              onClick={() => setIsPublic(false)}
+              className={`p-2.5 sm:p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                !isPublic
+                  ? 'bg-zinc-800 border-zinc-500 text-white shadow-sm ring-1 ring-white/10'
+                  : 'bg-zinc-900/60 border-zinc-800/80 text-zinc-400 hover:text-white'
+              }`}
+            >
+              <div className="flex items-center gap-1.5 mb-1">
+                <Lock className="w-3.5 h-3.5 text-amber-400" />
+                <span className="text-xs font-semibold">Private (Code)</span>
+              </div>
+              <p className="text-[10.5px] text-zinc-400 leading-tight">
+                Requires direct room code to join.
+              </p>
+            </button>
           </div>
         </div>
 
         {/* Initial Track Option */}
         {currentTrack && (
-          <div className="p-3 rounded-xl bg-zinc-900/80 border border-zinc-800 flex items-center justify-between">
+          <div className="p-2.5 sm:p-3 rounded-xl bg-zinc-900/80 border border-zinc-800 flex items-center justify-between">
             <div className="min-w-0 pr-3">
               <p className="text-xs font-medium text-white truncate">Start with currently playing song</p>
-              <p className="text-[11px] text-zinc-400 truncate">{currentTrack.title}</p>
+              <p className="text-[10.5px] text-zinc-400 truncate">{currentTrack.title}</p>
             </div>
             <input
               type="checkbox"
@@ -250,16 +289,6 @@ export const CreateRoomModal: React.FC<CreateRoomModalProps> = ({ isOpen, onClos
             />
           </div>
         )}
-
-        <div className="sticky bottom-0 bg-[#0e1222]/95 backdrop-blur-md pt-3 pb-1 -mx-1 px-1 border-t border-zinc-800/80 flex items-center justify-end gap-2.5 z-10">
-          <Button variant="ghost" size="sm" type="button" onClick={onClose} className="text-xs">
-            Cancel
-          </Button>
-          <Button variant="primary" size="md" type="submit" isLoading={isLoading} className="flex items-center gap-2 text-xs sm:text-sm">
-            <Radio className="w-4 h-4" />
-            <span>Launch Room</span>
-          </Button>
-        </div>
       </form>
     </Modal>
   );
