@@ -10,6 +10,7 @@ plugins = []
 publish = "C:\\Users\\shash\\Documents\\Fourth Year\\Music\\frontend\\dist"
 publishOrigin = "config"
 commandOrigin = "config"
+base = "C:\\Users\\shash\\Documents\\Fourth Year\\Music\\frontend"
 command = "npm run build"
 
 [build.environment]
