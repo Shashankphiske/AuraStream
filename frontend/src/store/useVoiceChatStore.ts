@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { voiceChatService } from '../services/voiceChatService';
+import { IRoomVoicePeer } from '../types';
 
 interface VoiceChatState {
   isVoiceActive: boolean;
@@ -9,11 +10,13 @@ interface VoiceChatState {
   isSpeaking: boolean;
   isDucked: boolean;
   activeSpeakers: string[];
+  connectedPeers: IRoomVoicePeer[];
+  voiceStatus: 'idle' | 'connecting' | 'connected' | 'error';
   micError: string | null;
 
   // Actions
-  startVoiceChat: () => Promise<void>;
-  startMusicBroadcast: () => Promise<void>;
+  startVoiceChat: (roomId?: string, user?: { id?: string; name: string; avatar?: string | null }) => Promise<void>;
+  startMusicBroadcast: (roomId?: string, user?: { id?: string; name: string; avatar?: string | null }) => Promise<void>;
   stopVoiceChat: () => void;
   stopMusicBroadcast: () => void;
   toggleMute: () => void;
@@ -24,7 +27,7 @@ interface VoiceChatState {
 }
 
 export const useVoiceChatStore = create<VoiceChatState>((set, get) => {
-  // Listen to local speech events from voiceChatService
+  // Listen to speech events (local & remote) from voiceChatService
   voiceChatService.onSpeechChange((isSpeaking, speakerName) => {
     const { activeSpeakers } = get();
     let updated = [...activeSpeakers];
@@ -36,10 +39,20 @@ export const useVoiceChatStore = create<VoiceChatState>((set, get) => {
     }
 
     set({
-      isSpeaking,
+      isSpeaking: voiceChatService.isSpeakingActive(),
       isDucked: voiceChatService.isAudioDucked(),
       activeSpeakers: updated,
     });
+  });
+
+  // Listen to connected peers changes
+  voiceChatService.onPeersChange((peers) => {
+    set({ connectedPeers: peers });
+  });
+
+  // Listen to connection status changes
+  voiceChatService.onStatusChange((status, err) => {
+    set({ voiceStatus: status, micError: err || null });
   });
 
   return {
@@ -50,30 +63,40 @@ export const useVoiceChatStore = create<VoiceChatState>((set, get) => {
     isSpeaking: false,
     isDucked: false,
     activeSpeakers: [],
+    connectedPeers: [],
+    voiceStatus: 'idle',
     micError: null,
 
-    startVoiceChat: async () => {
-      set({ micError: null });
+    startVoiceChat: async (roomId?: string, user?: { id?: string; name: string; avatar?: string | null }) => {
+      set({ micError: null, voiceStatus: 'connecting' });
       try {
-        await voiceChatService.startMicrophone('voice');
-        set({ isVoiceActive: true, isBroadcastingMusic: false, isMuted: false });
+        if (roomId) {
+          await voiceChatService.joinRoomVoice(roomId, user, 'voice');
+        } else {
+          await voiceChatService.startMicrophone('voice');
+        }
+        set({ isVoiceActive: true, isBroadcastingMusic: false, isMuted: false, voiceStatus: 'connected' });
       } catch (err: any) {
-        set({ micError: err?.message || 'Failed to start microphone' });
+        set({ micError: err?.message || 'Failed to start voice chat', voiceStatus: 'error' });
       }
     },
 
-    startMusicBroadcast: async () => {
-      set({ micError: null });
+    startMusicBroadcast: async (roomId?: string, user?: { id?: string; name: string; avatar?: string | null }) => {
+      set({ micError: null, voiceStatus: 'connecting' });
       try {
-        await voiceChatService.startDeviceMusicBroadcast();
-        set({ isVoiceActive: true, isBroadcastingMusic: true, isMuted: false });
+        if (roomId) {
+          await voiceChatService.joinRoomVoice(roomId, user, 'music_broadcast');
+        } else {
+          await voiceChatService.startDeviceMusicBroadcast();
+        }
+        set({ isVoiceActive: true, isBroadcastingMusic: true, isMuted: false, voiceStatus: 'connected' });
       } catch (err: any) {
-        set({ micError: err?.message || 'Failed to start device music broadcast' });
+        set({ micError: err?.message || 'Failed to start device music broadcast', voiceStatus: 'error' });
       }
     },
 
     stopVoiceChat: () => {
-      voiceChatService.stopMicrophone();
+      voiceChatService.leaveRoomVoice().catch(() => {});
       set({
         isVoiceActive: false,
         isBroadcastingMusic: false,
@@ -81,18 +104,22 @@ export const useVoiceChatStore = create<VoiceChatState>((set, get) => {
         isSpeaking: false,
         isDucked: false,
         activeSpeakers: [],
+        connectedPeers: [],
+        voiceStatus: 'idle',
         micError: null,
       });
     },
 
     stopMusicBroadcast: () => {
-      voiceChatService.stopMicrophone();
+      voiceChatService.leaveRoomVoice().catch(() => {});
       set({
         isVoiceActive: false,
         isBroadcastingMusic: false,
         isMuted: false,
         isSpeaking: false,
         isDucked: false,
+        connectedPeers: [],
+        voiceStatus: 'idle',
       });
     },
 

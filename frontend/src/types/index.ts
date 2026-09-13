@@ -186,4 +186,29 @@ export interface IHotspotMessage {
   timestamp: number;
 }
 
+// WebRTC Voice Chat Room Types
+export interface IRoomVoicePeer {
+  peer_id: string;
+  user_id?: string | null;
+  user_name: string;
+  user_avatar?: string | null;
+  is_muted?: boolean | number;
+  is_speaking?: boolean | number;
+  audio_mode?: 'voice' | 'music_broadcast';
+  last_seen?: number;
+}
+
+export interface IRoomVoiceSignal {
+  id?: string;
+  fromPeerId: string;
+  toPeerId: string;
+  fromName?: string;
+  signalData: {
+    type: 'offer' | 'answer' | 'ice-candidate';
+    sdp?: RTCSessionDescriptionInit;
+    candidate?: RTCIceCandidateInit;
+  };
+  createdAt?: number;
+}
+
 

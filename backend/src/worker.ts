@@ -1247,6 +1247,194 @@ export default {
         return json({ success: true, message: 'Message sent' });
       }
 
+      // ==========================================
+      // 12. WEBRTC ROOM VOICE CHAT SIGNALING
+      // ==========================================
+
+      // Initialize voice tables in D1 if not exists
+      const ensureVoiceTables = async () => {
+        if (!env.DB) return;
+        try {
+          await env.DB.prepare(`
+            CREATE TABLE IF NOT EXISTS room_voice_peers (
+              room_id TEXT NOT NULL,
+              peer_id TEXT NOT NULL,
+              user_id TEXT,
+              user_name TEXT NOT NULL,
+              user_avatar TEXT,
+              is_muted INTEGER DEFAULT 0,
+              is_speaking INTEGER DEFAULT 0,
+              audio_mode TEXT DEFAULT 'voice',
+              last_seen INTEGER NOT NULL,
+              PRIMARY KEY (room_id, peer_id)
+            )
+          `).run();
+          await env.DB.prepare(`
+            CREATE TABLE IF NOT EXISTS room_voice_signals (
+              id TEXT PRIMARY KEY,
+              room_id TEXT NOT NULL,
+              from_peer_id TEXT NOT NULL,
+              to_peer_id TEXT NOT NULL,
+              from_name TEXT,
+              signal_data TEXT NOT NULL,
+              created_at INTEGER NOT NULL
+            )
+          `).run();
+        } catch (err) {
+          console.warn('Voice table init notice:', err);
+        }
+      };
+
+      // Join Voice Chat in Room
+      if (path.match(/^\/rooms\/[^\/]+\/voice\/join$/) && method === 'POST') {
+        await ensureVoiceTables();
+        const roomId = path.split('/')[2];
+        const user = await getAuthUser(request, env);
+        const body = (await request.json()) as any;
+        const { peerId, userName = user?.name || 'Voice Member', userAvatar = user?.avatar, audioMode = 'voice' } = body;
+
+        if (!peerId) return json({ success: false, message: 'peerId required' }, 400);
+
+        const now = Date.now();
+        // Clean up stale peers (> 20s inactive)
+        await env.DB.prepare('DELETE FROM room_voice_peers WHERE last_seen < ?').bind(now - 20000).run().catch(() => {});
+
+        // Upsert peer
+        await env.DB.prepare(`
+          INSERT INTO room_voice_peers (room_id, peer_id, user_id, user_name, user_avatar, is_muted, is_speaking, audio_mode, last_seen)
+          VALUES (?, ?, ?, ?, ?, 0, 0, ?, ?)
+          ON CONFLICT(room_id, peer_id) DO UPDATE SET
+            user_name = excluded.user_name,
+            user_avatar = excluded.user_avatar,
+            audio_mode = excluded.audio_mode,
+            last_seen = excluded.last_seen
+        `).bind(roomId, peerId, user?.id || null, userName, userAvatar || null, audioMode, now).run();
+
+        // Return other peers in this room
+        const activePeers = await env.DB.prepare(`
+          SELECT peer_id, user_id, user_name, user_avatar, is_muted, is_speaking, audio_mode, last_seen
+          FROM room_voice_peers
+          WHERE room_id = ? AND peer_id != ?
+        `).bind(roomId, peerId).all();
+
+        return json({
+          success: true,
+          data: {
+            peerId,
+            peers: activePeers.results || [],
+          },
+        });
+      }
+
+      // Leave Voice Chat in Room
+      if (path.match(/^\/rooms\/[^\/]+\/voice\/leave$/) && method === 'POST') {
+        await ensureVoiceTables();
+        const roomId = path.split('/')[2];
+        const body = (await request.json()) as any;
+        const { peerId } = body;
+
+        if (peerId) {
+          await env.DB.prepare('DELETE FROM room_voice_peers WHERE room_id = ? AND peer_id = ?')
+            .bind(roomId, peerId).run().catch(() => {});
+          await env.DB.prepare('DELETE FROM room_voice_signals WHERE room_id = ? AND (from_peer_id = ? OR to_peer_id = ?)')
+            .bind(roomId, peerId, peerId).run().catch(() => {});
+        }
+
+        return json({ success: true, message: 'Left voice channel' });
+      }
+
+      // Send WebRTC Signal (Offer, Answer, or ICE Candidate)
+      if (path.match(/^\/rooms\/[^\/]+\/voice\/signal$/) && method === 'POST') {
+        await ensureVoiceTables();
+        const roomId = path.split('/')[2];
+        const body = (await request.json()) as any;
+        const { fromPeerId, toPeerId, fromName, signalData } = body;
+
+        if (!fromPeerId || !toPeerId || !signalData) {
+          return json({ success: false, message: 'fromPeerId, toPeerId, and signalData required' }, 400);
+        }
+
+        const sigId = 'sig_' + crypto.randomUUID().replace(/-/g, '').slice(0, 16);
+        const serialized = typeof signalData === 'string' ? signalData : JSON.stringify(signalData);
+
+        await env.DB.prepare(`
+          INSERT INTO room_voice_signals (id, room_id, from_peer_id, to_peer_id, from_name, signal_data, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `).bind(sigId, roomId, fromPeerId, toPeerId, fromName || '', serialized, Date.now()).run();
+
+        return json({ success: true, message: 'Signal queued' });
+      }
+
+      // Poll Voice Signals & Active Peers Heartbeat
+      if (path.match(/^\/rooms\/[^\/]+\/voice\/poll$/) && method === 'GET') {
+        await ensureVoiceTables();
+        const roomId = path.split('/')[2];
+        const peerId = url.searchParams.get('peerId');
+        const isMuted = url.searchParams.get('isMuted') === '1' ? 1 : 0;
+        const isSpeaking = url.searchParams.get('isSpeaking') === '1' ? 1 : 0;
+
+        if (!peerId) return json({ success: false, message: 'peerId parameter required' }, 400);
+
+        const now = Date.now();
+
+        // 1. Update heartbeat
+        await env.DB.prepare(`
+          UPDATE room_voice_peers
+          SET last_seen = ?, is_muted = ?, is_speaking = ?
+          WHERE room_id = ? AND peer_id = ?
+        `).bind(now, isMuted, isSpeaking, roomId, peerId).run().catch(() => {});
+
+        // 2. Fetch pending signals for this peer
+        const pending = await env.DB.prepare(`
+          SELECT id, from_peer_id, to_peer_id, from_name, signal_data, created_at
+          FROM room_voice_signals
+          WHERE room_id = ? AND to_peer_id = ?
+          ORDER BY created_at ASC
+        `).bind(roomId, peerId).all();
+
+        // 3. Delete consumed signals
+        if (pending.results && pending.results.length > 0) {
+          await env.DB.prepare(`
+            DELETE FROM room_voice_signals
+            WHERE room_id = ? AND to_peer_id = ?
+          `).bind(roomId, peerId).run().catch(() => {});
+        }
+
+        // 4. Clean up stale peers (> 20s) and expired signals (> 30s)
+        await env.DB.prepare('DELETE FROM room_voice_peers WHERE last_seen < ?').bind(now - 20000).run().catch(() => {});
+        await env.DB.prepare('DELETE FROM room_voice_signals WHERE created_at < ?').bind(now - 30000).run().catch(() => {});
+
+        // 5. Get current active peers in room
+        const active = await env.DB.prepare(`
+          SELECT peer_id, user_id, user_name, user_avatar, is_muted, is_speaking, audio_mode, last_seen
+          FROM room_voice_peers
+          WHERE room_id = ?
+        `).bind(roomId).all();
+
+        const formattedSignals = (pending.results || []).map((s: any) => {
+          let data = s.signal_data;
+          try {
+            data = JSON.parse(s.signal_data);
+          } catch {}
+          return {
+            id: s.id,
+            fromPeerId: s.from_peer_id,
+            toPeerId: s.to_peer_id,
+            fromName: s.from_name,
+            signalData: data,
+            createdAt: s.created_at,
+          };
+        });
+
+        return json({
+          success: true,
+          data: {
+            signals: formattedSignals,
+            peers: active.results || [],
+          },
+        });
+      }
+
       // Fallback 404
       return json({ success: false, message: 'Route not found on AuraStream Edge API', path: url.pathname }, 404);
     } catch (err: any) {

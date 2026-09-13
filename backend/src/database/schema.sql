@@ -155,3 +155,30 @@ CREATE INDEX IF NOT EXISTS idx_room_members_room ON room_members(room_id);
 CREATE INDEX IF NOT EXISTS idx_room_queue_room ON room_queue(room_id, position);
 CREATE INDEX IF NOT EXISTS idx_room_messages_room ON room_messages(room_id, created_at DESC);
 
+-- WebRTC Room Voice Chat
+CREATE TABLE IF NOT EXISTS room_voice_peers (
+  room_id TEXT NOT NULL,
+  peer_id TEXT NOT NULL,
+  user_id TEXT,
+  user_name TEXT NOT NULL,
+  user_avatar TEXT,
+  is_muted INTEGER DEFAULT 0,
+  is_speaking INTEGER DEFAULT 0,
+  audio_mode TEXT DEFAULT 'voice',
+  last_seen INTEGER NOT NULL,
+  PRIMARY KEY (room_id, peer_id)
+);
+
+CREATE TABLE IF NOT EXISTS room_voice_signals (
+  id TEXT PRIMARY KEY,
+  room_id TEXT NOT NULL,
+  from_peer_id TEXT NOT NULL,
+  to_peer_id TEXT NOT NULL,
+  from_name TEXT,
+  signal_data TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_voice_signals_to ON room_voice_signals(room_id, to_peer_id);
+CREATE INDEX IF NOT EXISTS idx_voice_peers_room ON room_voice_peers(room_id, last_seen);
+

@@ -90,6 +90,8 @@ export const RoomSessionPage: React.FC = () => {
     isSpeaking,
     isDucked,
     activeSpeakers,
+    connectedPeers,
+    voiceStatus,
     micError,
     startVoiceChat,
     startMusicBroadcast,
@@ -100,6 +102,26 @@ export const RoomSessionPage: React.FC = () => {
     pressPushToTalk,
     releasePushToTalk,
   } = useVoiceChatStore();
+
+  const handleStartVoice = () => {
+    if (currentRoom) {
+      startVoiceChat(currentRoom.id, {
+        id: user?.id,
+        name: user?.name || 'Listener',
+        avatar: user?.avatar,
+      });
+    }
+  };
+
+  const handleStartBroadcast = () => {
+    if (currentRoom) {
+      startMusicBroadcast(currentRoom.id, {
+        id: user?.id,
+        name: user?.name || 'Listener',
+        avatar: user?.avatar,
+      });
+    }
+  };
 
   // Set user display name in voice chat
   useEffect(() => {
@@ -351,208 +373,265 @@ export const RoomSessionPage: React.FC = () => {
       </div>
 
       {/* 2. Live Voice Chat & Device Audio Broadcast Control Bar */}
-      <div className="p-4 rounded-2xl bg-zinc-900/80 border border-zinc-850 flex flex-col md:flex-row items-center justify-between gap-4 shadow-sm">
-        <div className="flex items-center gap-3.5 w-full md:w-auto">
-          <div
-            className={`w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 transition-all ${
-              isBroadcastingMusic
-                ? 'bg-amber-500 text-black shadow-lg shadow-amber-500/30 scale-105 animate-pulse'
-                : isSpeaking
-                ? 'bg-emerald-500 text-black shadow-lg shadow-emerald-500/30 scale-105'
-                : isVoiceActive
-                ? isMuted
-                  ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
-                  : 'bg-zinc-800 text-zinc-200 border border-zinc-700'
-                : 'bg-zinc-850 text-zinc-500 border border-zinc-800'
-            }`}
-          >
-            {isBroadcastingMusic ? (
-              <Radio className="w-5 h-5 text-black animate-pulse" />
-            ) : isVoiceActive ? (
-              isMuted ? (
-                <MicOff className="w-5 h-5" />
-              ) : (
-                <Mic className={`w-5 h-5 ${isSpeaking ? 'animate-pulse text-black' : 'text-emerald-400'}`} />
-              )
-            ) : (
-              <Headphones className="w-5 h-5" />
-            )}
-          </div>
-
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-bold text-white uppercase tracking-wider">
-                {isBroadcastingMusic
-                  ? 'Live Device Music Broadcast'
+      <div className="p-4 rounded-2xl bg-zinc-900/80 border border-zinc-850 flex flex-col gap-3.5 shadow-sm">
+        <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5 w-full md:w-auto">
+            <div
+              className={`w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 transition-all ${
+                isBroadcastingMusic
+                  ? 'bg-amber-500 text-black shadow-lg shadow-amber-500/30 scale-105 animate-pulse'
+                  : isSpeaking
+                  ? 'bg-emerald-500 text-black shadow-lg shadow-emerald-500/30 scale-105'
                   : isVoiceActive
-                  ? 'Room Voice Audio Chat'
-                  : 'In-Room Audio & Voice'}
-              </span>
-
+                  ? isMuted
+                    ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                    : 'bg-zinc-800 text-zinc-200 border border-zinc-700'
+                  : 'bg-zinc-850 text-zinc-500 border border-zinc-800'
+              }`}
+            >
               {isBroadcastingMusic ? (
-                <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-bold animate-pulse">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-                  DJ BROADCASTING
-                </span>
+                <Radio className="w-5 h-5 text-black animate-pulse" />
               ) : isVoiceActive ? (
-                <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-semibold">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  VOICE ACTIVE
-                </span>
+                isMuted ? (
+                  <MicOff className="w-5 h-5" />
+                ) : (
+                  <Mic className={`w-5 h-5 ${isSpeaking ? 'animate-pulse text-black' : 'text-emerald-400'}`} />
+                )
               ) : (
-                <span className="px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400 text-[10px] font-medium">
-                  HOTSPOT READY
-                </span>
-              )}
-
-              {isDucked && (
-                <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-bold animate-pulse">
-                  <Volume1 className="w-3 h-3" />
-                  <span>SMART DUCKING (25%)</span>
-                </span>
+                <Headphones className="w-5 h-5" />
               )}
             </div>
 
-            <p className="text-[11px] text-zinc-400 truncate mt-0.5">
-              {isBroadcastingMusic
-                ? '📻 Broadcasting live audio (Spotify / YouTube Music / Device) in high-fidelity stereo to all hotspot listeners'
-                : isSpeaking
-                ? '🎤 You are speaking — music volume auto-ducked to 25%'
-                : activeSpeakers.length > 0
-                ? `🎤 ${activeSpeakers.join(', ')} speaking — music ducked`
-                : isVoiceActive
-                ? isPushToTalk
-                  ? 'Push-to-Talk active: Hold Spacebar or click & hold [Speak] button'
-                  : 'Open mic active with Smart Ducking: music automatically lowers when you speak'
-                : 'Share music from Spotify or talk live with friends over Wi-Fi hotspot with zero internet.'}
-            </p>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-bold text-white uppercase tracking-wider">
+                  {isBroadcastingMusic
+                    ? 'Live Device Music Broadcast'
+                    : isVoiceActive
+                    ? 'Room Voice Audio Chat'
+                    : 'In-Room Audio & Voice'}
+                </span>
 
-            {micError && (
-              <p className="text-[10px] text-rose-400 font-medium mt-1">⚠️ {micError}</p>
+                {isBroadcastingMusic ? (
+                  <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-bold animate-pulse">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                    DJ BROADCASTING
+                  </span>
+                ) : isVoiceActive ? (
+                  <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-semibold">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    VOICE ACTIVE
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400 text-[10px] font-medium">
+                    HOTSPOT READY
+                  </span>
+                )}
+
+                {isDucked && (
+                  <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-bold animate-pulse">
+                    <Volume1 className="w-3 h-3" />
+                    <span>SMART DUCKING (25%)</span>
+                  </span>
+                )}
+              </div>
+
+              <p className="text-[11px] text-zinc-400 truncate mt-0.5">
+                {isBroadcastingMusic
+                  ? '📻 Broadcasting live audio (Spotify / YouTube Music / Device) in high-fidelity stereo to all hotspot listeners'
+                  : isSpeaking
+                  ? '🎤 You are speaking — music volume auto-ducked to 25%'
+                  : activeSpeakers.length > 0
+                  ? `🎤 ${activeSpeakers.join(', ')} speaking — music ducked`
+                  : isVoiceActive
+                  ? isPushToTalk
+                    ? 'Push-to-Talk active: Hold Spacebar or click & hold [Speak] button'
+                    : 'Open mic active with Smart Ducking: music automatically lowers when you speak'
+                  : 'Share music from Spotify or talk live with friends over Wi-Fi hotspot with zero internet.'}
+              </p>
+
+              {micError && (
+                <p className="text-[10px] text-rose-400 font-medium mt-1">⚠️ {micError}</p>
+              )}
+            </div>
+          </div>
+
+          {/* Voice & Broadcast Controls */}
+          <div className="flex items-center gap-2 w-full md:w-auto justify-end flex-wrap">
+            {isBroadcastingMusic ? (
+              <>
+                {/* Mic / Audio Mute */}
+                <button
+                  type="button"
+                  onClick={toggleMute}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                    isMuted
+                      ? 'bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30'
+                      : 'bg-zinc-800 hover:bg-zinc-750 text-zinc-200 border border-zinc-700'
+                  }`}
+                  title={isMuted ? 'Resume audio broadcast' : 'Mute audio broadcast'}
+                >
+                  {isMuted ? <VolumeX className="w-3.5 h-3.5 text-rose-400" /> : <Volume2 className="w-3.5 h-3.5 text-amber-400" />}
+                  <span>{isMuted ? 'Muted' : 'Live'}</span>
+                </button>
+
+                {/* Stop Broadcast */}
+                <button
+                  type="button"
+                  onClick={stopMusicBroadcast}
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 text-xs font-semibold transition-colors cursor-pointer"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>Stop Broadcast</span>
+                </button>
+              </>
+            ) : isVoiceActive ? (
+              <>
+                {/* Mic Toggle Button */}
+                <button
+                  type="button"
+                  onClick={toggleMute}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                    isMuted
+                      ? 'bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30'
+                      : 'bg-zinc-800 hover:bg-zinc-750 text-zinc-200 border border-zinc-700'
+                  }`}
+                  title={isMuted ? 'Unmute microphone' : 'Mute microphone'}
+                >
+                  {isMuted ? <MicOff className="w-3.5 h-3.5 text-rose-400" /> : <Mic className="w-3.5 h-3.5 text-emerald-400" />}
+                  <span>{isMuted ? 'Muted' : 'Mic On'}</span>
+                </button>
+
+                {/* Push-to-Talk Toggle */}
+                <button
+                  type="button"
+                  onClick={() => setPushToTalk(!isPushToTalk)}
+                  className={`px-3 py-2 rounded-xl text-xs font-medium border transition-colors cursor-pointer ${
+                    isPushToTalk
+                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                      : 'bg-zinc-850 text-zinc-400 border-zinc-800 hover:text-zinc-200'
+                  }`}
+                  title="Toggle Push-to-Talk mode"
+                >
+                  PTT: {isPushToTalk ? 'ON' : 'OFF'}
+                </button>
+
+                {/* Push-to-Talk Action Button */}
+                {isPushToTalk && (
+                  <button
+                    type="button"
+                    onMouseDown={pressPushToTalk}
+                    onMouseUp={releasePushToTalk}
+                    onTouchStart={(e) => {
+                      e.preventDefault();
+                      pressPushToTalk();
+                    }}
+                    onTouchEnd={(e) => {
+                      e.preventDefault();
+                      releasePushToTalk();
+                    }}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-all select-none cursor-pointer flex items-center gap-1.5 ${
+                      isSpeaking
+                        ? 'bg-emerald-500 text-black shadow-lg shadow-emerald-500/30 scale-95'
+                        : 'bg-zinc-800 hover:bg-zinc-750 text-white border border-zinc-700 active:scale-95'
+                    }`}
+                  >
+                    <Mic className="w-3.5 h-3.5" />
+                    <span>{isSpeaking ? 'Speaking...' : 'Hold Space / Talk'}</span>
+                  </button>
+                )}
+
+                {/* Leave Voice Channel Button */}
+                <button
+                  type="button"
+                  onClick={stopVoiceChat}
+                  className="p-2 rounded-xl bg-zinc-850 hover:bg-rose-950/30 text-zinc-400 hover:text-rose-400 border border-zinc-800 transition-colors cursor-pointer"
+                  title="Disconnect voice chat"
+                >
+                  <MicOff className="w-4 h-4" />
+                </button>
+              </>
+            ) : (
+              <>
+                {/* Broadcast Device Music (Spotify, YT Music, etc.) */}
+                <button
+                  type="button"
+                  onClick={handleStartBroadcast}
+                  className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 text-xs font-semibold transition-all cursor-pointer active:scale-95"
+                  title="Broadcast music playing from Spotify or device to the room"
+                >
+                  <Radio className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Broadcast Device Music</span>
+                </button>
+
+                {/* Join Voice Chat */}
+                <button
+                  type="button"
+                  onClick={handleStartVoice}
+                  className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white hover:bg-zinc-200 text-black text-xs font-bold transition-all cursor-pointer shadow-sm active:scale-95"
+                >
+                  <Mic className="w-3.5 h-3.5" />
+                  <span>Join Voice</span>
+                </button>
+              </>
             )}
           </div>
         </div>
 
-        {/* Voice & Broadcast Controls */}
-        <div className="flex items-center gap-2 w-full md:w-auto justify-end flex-wrap">
-          {isBroadcastingMusic ? (
-            <>
-              {/* Mic / Audio Mute */}
-              <button
-                type="button"
-                onClick={toggleMute}
-                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                  isMuted
-                    ? 'bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30'
-                    : 'bg-zinc-800 hover:bg-zinc-750 text-zinc-200 border border-zinc-700'
-                }`}
-                title={isMuted ? 'Resume audio broadcast' : 'Mute audio broadcast'}
-              >
-                {isMuted ? <VolumeX className="w-3.5 h-3.5 text-rose-400" /> : <Volume2 className="w-3.5 h-3.5 text-amber-400" />}
-                <span>{isMuted ? 'Muted' : 'Live'}</span>
-              </button>
+        {/* Active Voice Participants Roster */}
+        {(isVoiceActive || connectedPeers.length > 0) && (
+          <div className="w-full pt-3 border-t border-zinc-800/80 flex items-center justify-between flex-wrap gap-2 text-xs">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Voice Channel:</span>
 
-              {/* Stop Broadcast */}
-              <button
-                type="button"
-                onClick={stopMusicBroadcast}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 text-xs font-semibold transition-colors cursor-pointer"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-                <span>Stop Broadcast</span>
-              </button>
-            </>
-          ) : isVoiceActive ? (
-            <>
-              {/* Mic Toggle Button */}
-              <button
-                type="button"
-                onClick={toggleMute}
-                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                  isMuted
-                    ? 'bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30'
-                    : 'bg-zinc-800 hover:bg-zinc-750 text-zinc-200 border border-zinc-700'
-                }`}
-                title={isMuted ? 'Unmute microphone' : 'Mute microphone'}
-              >
-                {isMuted ? <MicOff className="w-3.5 h-3.5 text-rose-400" /> : <Mic className="w-3.5 h-3.5 text-emerald-400" />}
-                <span>{isMuted ? 'Muted' : 'Mic On'}</span>
-              </button>
-
-              {/* Push-to-Talk Toggle */}
-              <button
-                type="button"
-                onClick={() => setPushToTalk(!isPushToTalk)}
-                className={`px-3 py-2 rounded-xl text-xs font-medium border transition-colors cursor-pointer ${
-                  isPushToTalk
-                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
-                    : 'bg-zinc-850 text-zinc-400 border-zinc-800 hover:text-zinc-200'
-                }`}
-                title="Toggle Push-to-Talk mode"
-              >
-                PTT: {isPushToTalk ? 'ON' : 'OFF'}
-              </button>
-
-              {/* Push-to-Talk Action Button */}
-              {isPushToTalk && (
-                <button
-                  type="button"
-                  onMouseDown={pressPushToTalk}
-                  onMouseUp={releasePushToTalk}
-                  onTouchStart={(e) => {
-                    e.preventDefault();
-                    pressPushToTalk();
-                  }}
-                  onTouchEnd={(e) => {
-                    e.preventDefault();
-                    releasePushToTalk();
-                  }}
-                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all select-none cursor-pointer flex items-center gap-1.5 ${
+              {/* Local User */}
+              {isVoiceActive && (
+                <div
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold transition-all ${
                     isSpeaking
-                      ? 'bg-emerald-500 text-black shadow-lg shadow-emerald-500/30 scale-95'
-                      : 'bg-zinc-800 hover:bg-zinc-750 text-white border border-zinc-700 active:scale-95'
+                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 ring-2 ring-emerald-500/30'
+                      : isMuted
+                      ? 'bg-rose-500/10 text-rose-300 border border-rose-500/20'
+                      : 'bg-zinc-800 text-zinc-200 border border-zinc-700'
                   }`}
                 >
-                  <Mic className="w-3.5 h-3.5" />
-                  <span>{isSpeaking ? 'Speaking...' : 'Hold Space / Talk'}</span>
-                </button>
+                  <span className={`w-2 h-2 rounded-full ${isSpeaking ? 'bg-emerald-400 animate-pulse' : isMuted ? 'bg-rose-400' : 'bg-emerald-500'}`} />
+                  <span>You</span>
+                  {isMuted ? <MicOff className="w-3 h-3 text-rose-400" /> : <Mic className="w-3 h-3 text-emerald-400" />}
+                </div>
               )}
 
-              {/* Leave Voice Channel Button */}
-              <button
-                type="button"
-                onClick={stopVoiceChat}
-                className="p-2 rounded-xl bg-zinc-850 hover:bg-rose-950/30 text-zinc-400 hover:text-rose-400 border border-zinc-800 transition-colors cursor-pointer"
-                title="Disconnect voice chat"
-              >
-                <MicOff className="w-4 h-4" />
-              </button>
-            </>
-          ) : (
-            <>
-              {/* Broadcast Device Music (Spotify, YT Music, etc.) */}
-              <button
-                type="button"
-                onClick={startMusicBroadcast}
-                className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 text-xs font-semibold transition-all cursor-pointer active:scale-95"
-                title="Broadcast music playing from Spotify or device to the room"
-              >
-                <Radio className="w-3.5 h-3.5 text-amber-400" />
-                <span>Broadcast Device Music</span>
-              </button>
+              {/* Remote Voice Peers */}
+              {connectedPeers.map((peer) => {
+                const peerIsSpeaking = activeSpeakers.includes(peer.user_name) || Boolean(peer.is_speaking);
+                return (
+                  <div
+                    key={peer.peer_id}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-all ${
+                      peerIsSpeaking
+                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 ring-2 ring-emerald-500/30 animate-pulse'
+                        : peer.is_muted
+                        ? 'bg-zinc-850 text-zinc-400 border border-zinc-800'
+                        : 'bg-zinc-800 text-zinc-200 border border-zinc-700'
+                    }`}
+                  >
+                    <span className={`w-2 h-2 rounded-full ${peerIsSpeaking ? 'bg-emerald-400 animate-pulse' : peer.is_muted ? 'bg-zinc-600' : 'bg-emerald-500/70'}`} />
+                    <span>{peer.user_name}</span>
+                    {peer.is_muted ? <VolumeX className="w-3 h-3 text-zinc-500" /> : <Volume2 className="w-3 h-3 text-zinc-400" />}
+                  </div>
+                );
+              })}
+            </div>
 
-              {/* Join Voice Chat */}
-              <button
-                type="button"
-                onClick={startVoiceChat}
-                className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white hover:bg-zinc-200 text-black text-xs font-bold transition-all cursor-pointer shadow-sm active:scale-95"
-              >
-                <Mic className="w-3.5 h-3.5" />
-                <span>Join Voice</span>
-              </button>
-            </>
-          )}
-        </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-mono text-zinc-500">
+                {voiceStatus === 'connecting'
+                  ? 'Connecting WebRTC P2P...'
+                  : `${connectedPeers.length + (isVoiceActive ? 1 : 0)} in voice`}
+              </span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 2. Main Synchronized Stage */}

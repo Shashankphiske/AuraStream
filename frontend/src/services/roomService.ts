@@ -1,5 +1,5 @@
 import api from './api';
-import { IRoom, IRoomMember, IRoomQueueItem, IRoomMessage, ITrack } from '../types';
+import { IRoom, IRoomMember, IRoomQueueItem, IRoomMessage, ITrack, IRoomVoicePeer, IRoomVoiceSignal } from '../types';
 import { CURATED_TRACKS } from '../constants';
 
 export interface RoomDetailsResponse {
@@ -92,5 +92,41 @@ export const roomService = {
     try {
       await api.post(`/rooms/${encodeURIComponent(roomId)}/messages`, { content, messageType });
     } catch {}
+  },
+
+  // WebRTC Room Voice Chat Signaling Methods
+  async joinVoice(
+    roomId: string,
+    data: { peerId: string; userName: string; userAvatar?: string | null; audioMode?: string }
+  ): Promise<{ peers: IRoomVoicePeer[] }> {
+    const res = await api.post(`/rooms/${encodeURIComponent(roomId)}/voice/join`, data);
+    return res.data?.data || { peers: [] };
+  },
+
+  async leaveVoice(roomId: string, peerId: string): Promise<void> {
+    try {
+      await api.post(`/rooms/${encodeURIComponent(roomId)}/voice/leave`, { peerId });
+    } catch {}
+  },
+
+  async sendVoiceSignal(
+    roomId: string,
+    data: { fromPeerId: string; toPeerId: string; fromName?: string; signalData: any }
+  ): Promise<void> {
+    try {
+      await api.post(`/rooms/${encodeURIComponent(roomId)}/voice/signal`, data);
+    } catch {}
+  },
+
+  async pollVoice(
+    roomId: string,
+    peerId: string,
+    isMuted: boolean,
+    isSpeaking: boolean
+  ): Promise<{ signals: IRoomVoiceSignal[]; peers: IRoomVoicePeer[] }> {
+    const res = await api.get(
+      `/rooms/${encodeURIComponent(roomId)}/voice/poll?peerId=${encodeURIComponent(peerId)}&isMuted=${isMuted ? 1 : 0}&isSpeaking=${isSpeaking ? 1 : 0}`
+    );
+    return res.data?.data || { signals: [], peers: [] };
   },
 };
