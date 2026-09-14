@@ -933,6 +933,16 @@ export default {
 
       // 11. LISTEN TOGETHER ROOMS (AURAROOMS)
       if (path === '/rooms' && method === 'GET') {
+        // Auto-delete rooms older than 24 hours and clean up associated child rows
+        await env.DB.batch([
+          env.DB.prepare("DELETE FROM room_members WHERE room_id IN (SELECT id FROM rooms WHERE created_at < datetime('now', '-24 hours'))"),
+          env.DB.prepare("DELETE FROM room_queue WHERE room_id IN (SELECT id FROM rooms WHERE created_at < datetime('now', '-24 hours'))"),
+          env.DB.prepare("DELETE FROM room_messages WHERE room_id IN (SELECT id FROM rooms WHERE created_at < datetime('now', '-24 hours'))"),
+          env.DB.prepare("DELETE FROM room_voice_peers WHERE room_id IN (SELECT id FROM rooms WHERE created_at < datetime('now', '-24 hours'))"),
+          env.DB.prepare("DELETE FROM room_voice_signals WHERE room_id IN (SELECT id FROM rooms WHERE created_at < datetime('now', '-24 hours'))"),
+          env.DB.prepare("DELETE FROM rooms WHERE created_at < datetime('now', '-24 hours')")
+        ]).catch(() => {});
+
         const roomsQuery = await env.DB.prepare(`
           SELECT r.*, u.name as host_name, u.avatar as host_avatar,
                  t.id as track_id, t.youtube_id, t.title as track_title, t.artist as track_artist, t.thumbnail_url as track_thumbnail, t.duration as track_duration,
@@ -1001,13 +1011,6 @@ export default {
         await env.DB.prepare('INSERT INTO room_members (id, room_id, user_id, role) VALUES (?, ?, ?, ?)')
           .bind(memberId, roomId, user.id, 'host').run();
 
-        // If initial track, add to queue
-        if (trackId) {
-          const queueId = 'rq_' + crypto.randomUUID().replace(/-/g, '').slice(0, 12);
-          await env.DB.prepare('INSERT INTO room_queue (id, room_id, track_id, added_by_user_id, position) VALUES (?, ?, ?, ?, ?)')
-            .bind(queueId, roomId, trackId, user.id, 0).run();
-        }
-
         return json({
           success: true,
           data: { id: roomId, code, name: name.trim(), hostId: user.id },
@@ -1028,6 +1031,22 @@ export default {
 
         if (!room) return json({ success: false, message: 'Room not found' }, 404);
 
+        // Check if room has expired (24 hour limit)
+        if (room.created_at) {
+          const roomAgeMs = Date.now() - new Date(room.created_at).getTime();
+          if (roomAgeMs > 24 * 60 * 60 * 1000) {
+            await env.DB.batch([
+              env.DB.prepare('DELETE FROM room_members WHERE room_id = ?').bind(room.id),
+              env.DB.prepare('DELETE FROM room_queue WHERE room_id = ?').bind(room.id),
+              env.DB.prepare('DELETE FROM room_messages WHERE room_id = ?').bind(room.id),
+              env.DB.prepare('DELETE FROM room_voice_peers WHERE room_id = ?').bind(room.id),
+              env.DB.prepare('DELETE FROM room_voice_signals WHERE room_id = ?').bind(room.id),
+              env.DB.prepare('DELETE FROM rooms WHERE id = ?').bind(room.id)
+            ]).catch(() => {});
+            return json({ success: false, message: 'This room session has expired after 24 hours.' }, 404);
+          }
+        }
+
         // Members
         const members = await env.DB.prepare(`
           SELECT rm.role, rm.joined_at, u.id, u.name, u.avatar
@@ -1042,7 +1061,7 @@ export default {
                  t.id, t.youtube_id, t.title, t.artist, t.thumbnail_url, t.duration,
                  u.name as added_by_name
           FROM room_queue rq
-          JOIN tracks t ON rq.track_id = t.id
+          JOIN tracks t ON (rq.track_id = t.id OR rq.track_id = t.youtube_id)
           JOIN users u ON rq.added_by_user_id = u.id
           WHERE rq.room_id = ?
           ORDER BY rq.position ASC
@@ -1148,7 +1167,7 @@ export default {
                  t.id, t.youtube_id, t.title, t.artist, t.thumbnail_url, t.duration,
                  u.name as added_by_name
           FROM room_queue rq
-          JOIN tracks t ON rq.track_id = t.id
+          JOIN tracks t ON (rq.track_id = t.id OR rq.track_id = t.youtube_id)
           JOIN users u ON rq.added_by_user_id = u.id
           WHERE rq.room_id = ?
           ORDER BY rq.position ASC
@@ -1195,7 +1214,7 @@ export default {
         await env.DB.prepare(`
           INSERT INTO tracks (id, youtube_id, title, artist, duration, thumbnail_url, genre, views)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-          ON CONFLICT(id) DO NOTHING
+          ON CONFLICT DO NOTHING
         `).bind(
           trackId,
           track.youtube_id || trackId,
@@ -1207,20 +1226,20 @@ export default {
           track.views || 0
         ).run();
 
-        const posCount = await env.DB.prepare('SELECT COUNT(*) as count FROM room_queue WHERE room_id = ?').bind(roomId).first();
-        const nextPos = (posCount?.count as number) || 0;
-
-        const queueId = 'rq_' + crypto.randomUUID().replace(/-/g, '').slice(0, 12);
-        await env.DB.prepare(`
-          INSERT INTO room_queue (id, room_id, track_id, added_by_user_id, position)
-          VALUES (?, ?, ?, ?, ?)
-        `).bind(queueId, roomId, trackId, user.id, nextPos).run();
-
-        // If no track is currently playing in room, auto-set this track as current
+        // If no track is currently playing in room, auto-set this track as current immediately without queuing
         const room = await env.DB.prepare('SELECT current_track_id FROM rooms WHERE id = ?').bind(roomId).first();
         if (!room?.current_track_id) {
           await env.DB.prepare('UPDATE rooms SET current_track_id = ?, is_playing = 1, playback_time = 0, last_sync_time = ? WHERE id = ?')
             .bind(trackId, Date.now(), roomId).run();
+        } else {
+          const posCount = await env.DB.prepare('SELECT COUNT(*) as count FROM room_queue WHERE room_id = ?').bind(roomId).first();
+          const nextPos = (posCount?.count as number) || 0;
+
+          const queueId = 'rq_' + crypto.randomUUID().replace(/-/g, '').slice(0, 12);
+          await env.DB.prepare(`
+            INSERT INTO room_queue (id, room_id, track_id, added_by_user_id, position)
+            VALUES (?, ?, ?, ?, ?)
+          `).bind(queueId, roomId, trackId, user.id, nextPos).run();
         }
 
         // Post notice
@@ -1245,6 +1264,104 @@ export default {
           .bind(msgId, roomId, user.id, content.trim(), messageType).run();
 
         return json({ success: true, message: 'Message sent' });
+      }
+
+      // Delete Room (Host or Admin only)
+      if (path.match(/^\/rooms\/[^\/]+$/) && method === 'DELETE') {
+        const user = await getAuthUser(request, env);
+        if (!user) return json({ success: false, message: 'Unauthorized' }, 401);
+        const roomId = path.split('/')[2];
+
+        const room = await env.DB.prepare('SELECT host_id FROM rooms WHERE id = ?').bind(roomId).first();
+        if (!room) return json({ success: false, message: 'Room not found' }, 404);
+
+        if (room.host_id !== user.id && user.role !== 'admin') {
+          return json({ success: false, message: 'Only the room host can delete this room' }, 403);
+        }
+
+        // Clean up child tables
+        await env.DB.prepare('DELETE FROM room_members WHERE room_id = ?').bind(roomId).run().catch(() => {});
+        await env.DB.prepare('DELETE FROM room_queue WHERE room_id = ?').bind(roomId).run().catch(() => {});
+        await env.DB.prepare('DELETE FROM room_messages WHERE room_id = ?').bind(roomId).run().catch(() => {});
+        await env.DB.prepare('DELETE FROM room_voice_peers WHERE room_id = ?').bind(roomId).run().catch(() => {});
+        await env.DB.prepare('DELETE FROM room_voice_signals WHERE room_id = ?').bind(roomId).run().catch(() => {});
+        await env.DB.prepare('DELETE FROM rooms WHERE id = ?').bind(roomId).run();
+
+        return json({ success: true, message: 'Room deleted successfully' });
+      }
+
+      // Skip Track in Room (for Everyone)
+      if (path.match(/^\/rooms\/[^\/]+\/skip$/) && method === 'POST') {
+        const user = await getAuthUser(request, env);
+        const roomId = path.split('/')[2];
+        const userName = user?.name || 'A participant';
+
+        // 1. Check if there is a next track queued in room_queue
+        const nextQueueItem = await env.DB.prepare(`
+          SELECT rq.id as queue_id, rq.track_id,
+                 t.id, t.youtube_id, t.title, t.artist, t.thumbnail_url, t.duration
+          FROM room_queue rq
+          JOIN tracks t ON (rq.track_id = t.id OR rq.track_id = t.youtube_id)
+          WHERE rq.room_id = ?
+          ORDER BY rq.position ASC
+          LIMIT 1
+        `).bind(roomId).first();
+
+        let nextTrack: any = null;
+
+        if (nextQueueItem) {
+          // Remove popped item from queue
+          await env.DB.prepare('DELETE FROM room_queue WHERE id = ?').bind(nextQueueItem.queue_id).run();
+          nextTrack = {
+            id: nextQueueItem.id,
+            youtube_id: nextQueueItem.youtube_id,
+            title: nextQueueItem.title,
+            artist: nextQueueItem.artist,
+            thumbnail_url: nextQueueItem.thumbnail_url,
+            duration: nextQueueItem.duration || 180,
+          };
+
+          const trackId = nextTrack.id || nextTrack.youtube_id;
+          const now = Date.now();
+          await env.DB.prepare(`
+            UPDATE rooms
+            SET current_track_id = ?,
+                is_playing = 1,
+                playback_time = 0,
+                last_sync_time = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+          `).bind(trackId, now, roomId).run();
+
+          // System message in room chat
+          const msgId = 'msg_' + crypto.randomUUID().replace(/-/g, '').slice(0, 12);
+          await env.DB.prepare('INSERT INTO room_messages (id, room_id, user_id, content, message_type) VALUES (?, ?, ?, ?, ?)')
+            .bind(msgId, roomId, user?.id || 'guest', `${userName} skipped to "${nextTrack.title}"`, 'system').run().catch(() => {});
+        } else {
+          // Queue is empty: set room to idle with no track playing
+          const now = Date.now();
+          await env.DB.prepare(`
+            UPDATE rooms
+            SET current_track_id = NULL,
+                is_playing = 0,
+                playback_time = 0,
+                last_sync_time = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+          `).bind(now, roomId).run();
+
+          // System message in room chat
+          const msgId = 'msg_' + crypto.randomUUID().replace(/-/g, '').slice(0, 12);
+          await env.DB.prepare('INSERT INTO room_messages (id, room_id, user_id, content, message_type) VALUES (?, ?, ?, ?, ?)')
+            .bind(msgId, roomId, user?.id || 'guest', `${userName} skipped track (queue is now empty)`, 'system').run().catch(() => {});
+        }
+
+        return json({
+          success: true,
+          data: {
+            nextTrack,
+          },
+        });
       }
 
       // ==========================================

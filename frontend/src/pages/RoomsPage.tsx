@@ -22,6 +22,8 @@ import {
   Globe,
   Search,
   UserCheck,
+  Trash2,
+  Clock,
 } from 'lucide-react';
 
 export const RoomsPage: React.FC = () => {
@@ -81,6 +83,19 @@ export const RoomsPage: React.FC = () => {
       navigate(`/room/${room.code}`);
     } catch (err) {
       console.error('Failed to join room:', err);
+    }
+  };
+
+  // Delete Room (Host / Admin)
+  const handleDeleteRoom = async (roomId: string, roomName: string) => {
+    if (!window.confirm(`Are you sure you want to permanently delete room "${roomName}"?`)) {
+      return;
+    }
+    try {
+      await roomService.deleteRoom(roomId);
+      queryClient.invalidateQueries({ queryKey: ['rooms-list'] });
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Failed to delete room');
     }
   };
 
@@ -377,16 +392,36 @@ export const RoomsPage: React.FC = () => {
                     <div>
                       {/* Top Meta */}
                       <div className="flex items-center justify-between gap-2 mb-2">
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                           <span className="text-[10px] font-mono uppercase font-semibold text-zinc-400">
                             {room.code}
                           </span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-zinc-800/90 text-zinc-400 border border-zinc-700/40 flex items-center gap-1">
+                            <Clock className="w-2.5 h-2.5 text-zinc-500" />
+                            <span>24h Session</span>
+                          </span>
                         </div>
 
-                        <div className="flex items-center gap-1.5 text-[11px] text-zinc-400">
-                          <Users className="w-3 h-3" />
-                          <span>{room.member_count || 1}</span>
+                        <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1 text-[11px] text-zinc-400">
+                            <Users className="w-3 h-3" />
+                            <span>{room.member_count || 1}</span>
+                          </div>
+
+                          {(room.host_id === user?.id || user?.role === 'admin') && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteRoom(room.id, room.name);
+                              }}
+                              className="p-1 rounded-lg bg-zinc-800/80 hover:bg-rose-500/20 text-zinc-400 hover:text-rose-400 border border-zinc-700/50 hover:border-rose-500/30 transition-colors cursor-pointer"
+                              title="Delete room"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          )}
                         </div>
                       </div>
 

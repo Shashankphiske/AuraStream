@@ -25,6 +25,8 @@ interface RoomState {
   sendMessage: (content: string, type?: 'chat' | 'reaction' | 'system') => Promise<void>;
   sendReaction: (emoji: string) => void;
   pollRoomState: () => Promise<void>;
+  skipTrack: () => Promise<void>;
+  deleteCurrentRoom: () => Promise<void>;
 }
 
 // Global Cross-Tab Sync Channel
@@ -121,14 +123,23 @@ export const useRoomStore = create<RoomState>((set, get) => ({
           setTimeout(() => set({ activeReaction: null }), 2500);
         }
 
+        if ((payload as any).type === 'ROOM_CLOSED') {
+          get().leaveRoom();
+          return;
+        }
+
         // Listener sync execution
         const { isHost: amHost, isLocallyPaused } = get();
-        if (!amHost) {
+        if (payload.type === 'NEXT_TRACK' && payload.track) {
+          lastSyncedYtId = payload.track.youtube_id;
+          player.playTrack(payload.track);
+          player.seekTo(0);
+          if (!isLocallyPaused) {
+            player.setPlaying(true);
+          }
+        } else if (!amHost) {
           if (isLocallyPaused) {
             // User paused locally — do not auto-play or seek, but keep queue updated
-            if (payload.type === 'NEXT_TRACK' && payload.track) {
-              lastSyncedYtId = payload.track.youtube_id;
-            }
           } else {
             if (payload.type === 'PLAY') {
               if (payload.track && player.currentTrack?.youtube_id !== payload.track.youtube_id) {
@@ -151,9 +162,6 @@ export const useRoomStore = create<RoomState>((set, get) => ({
               }
             } else if (payload.type === 'SEEK' && typeof payload.playbackTime === 'number') {
               player.seekTo(payload.playbackTime);
-            } else if (payload.type === 'NEXT_TRACK' && payload.track) {
-              lastSyncedYtId = payload.track.youtube_id;
-              player.playTrack(payload.track);
             }
           }
         }
@@ -188,7 +196,7 @@ export const useRoomStore = create<RoomState>((set, get) => ({
         const roomTrack: ITrack = {
           id: room.track_id || room.current_track_id || incomingYt,
           youtube_id: incomingYt,
-          title: room.track_title || 'Live Stream',
+          title: room.track_title || 'Room Song',
           artist: room.track_artist || 'AuraStream Artist',
           thumbnail_url: room.track_thumbnail || '',
           duration: Number(room.track_duration) || 180,
@@ -202,6 +210,10 @@ export const useRoomStore = create<RoomState>((set, get) => ({
         }
         player.setPlaying(Boolean(room.is_playing));
       }
+    } else {
+      // Room starts empty
+      lastSyncedYtId = null;
+      usePlayerStore.getState().setPlaying(false);
     }
   },
 
@@ -355,42 +367,29 @@ export const useRoomStore = create<RoomState>((set, get) => ({
 
     try {
       const data = await roomService.pollRoom(currentRoom.id);
-      if (!data || !data.room) return;
+      if (!data || !data.room) {
+        // Room was deleted or closed
+        get().leaveRoom();
+        return;
+      }
 
       const player = usePlayerStore.getState();
+      const { isLocallyPaused } = get();
 
-      // Listeners synchronize to host's playhead without reload thrashing
-      if (!isHost) {
-        const { isLocallyPaused } = get();
-
-        if (isLocallyPaused) {
-          // If the user deliberately stopped / paused locally, keep room meta updated without force-playing audio
-          set({
-            queue: data.queue || [],
-            members: data.members || [],
-            messages: data.messages || [],
-            currentRoom: {
-              ...currentRoom,
-              ...data.room,
-            },
-          });
-          return;
-        }
-
-        const roomIsPlaying = Boolean(data.room.is_playing);
-        const roomPlaybackTime = Number(data.room.playback_time) || 0;
-        const now = Date.now();
-        const lastSync = Number(data.room.last_sync_time) || now;
-        const syncAge = (now - lastSync) / 1000;
-
-        // Only extrapolate latency if sync happened recently (within 10s); otherwise room is idle
-        const effectiveLatency = (roomIsPlaying && syncAge >= 0 && syncAge <= 10) ? syncAge : 0;
-        const expectedTime = roomPlaybackTime + effectiveLatency;
+      // If user paused locally on their device, NEVER force audio to play!
+      if (isLocallyPaused) {
+        set({
+          queue: data.queue || [],
+          members: data.members || [],
+          messages: data.messages || [],
+          currentRoom: {
+            ...currentRoom,
+            ...data.room,
+          },
+        });
 
         const incomingTrackId = data.room.track_id || data.room.current_track_id;
         const incomingYtId = data.room.youtube_id || (incomingTrackId && incomingTrackId.length === 11 ? incomingTrackId : null);
-
-        // 1. Synchronize track ONLY IF a NEW track is received from host
         if (incomingYtId && incomingYtId !== lastSyncedYtId) {
           lastSyncedYtId = incomingYtId;
           const newTrack: ITrack = {
@@ -401,24 +400,57 @@ export const useRoomStore = create<RoomState>((set, get) => ({
             thumbnail_url: data.room.track_thumbnail || '',
             duration: Number(data.room.track_duration) || 180,
           };
-          player.playTrack(newTrack);
-          if (expectedTime > 0 && expectedTime < (newTrack.duration || 180) - 5) {
-            player.seekTo(expectedTime);
-          }
-        } else if (player.currentTrack && player.currentTrack.youtube_id === incomingYtId) {
-          // 2. Synchronize play/pause only if player is active
-          if (player.isPlaying !== roomIsPlaying) {
-            player.setPlaying(roomIsPlaying);
-          }
+          player.setTrackWithoutPlaying(newTrack);
+          player.seekTo(0);
+        }
+        return;
+      }
 
-          // 3. Drift correction ONLY IF within valid song duration and significant drift
-          const trackDuration = player.duration || Number(data.room.track_duration) || 180;
-          if (expectedTime < trackDuration - 5 && syncAge <= 10) {
-            const drift = Math.abs(player.currentTime - expectedTime);
-            // 4-second drift tolerance to prevent continuous seeking / buffering loops
-            if (drift > 4) {
-              player.seekTo(expectedTime);
-            }
+      const roomIsPlaying = Boolean(data.room.is_playing);
+      const roomPlaybackTime = Number(data.room.playback_time) || 0;
+      const now = Date.now();
+      const lastSync = Number(data.room.last_sync_time) || now;
+      const syncAge = (now - lastSync) / 1000;
+
+      // Only extrapolate latency if sync happened recently (within 10s); otherwise room is idle
+      const effectiveLatency = (roomIsPlaying && syncAge >= 0 && syncAge <= 10) ? syncAge : 0;
+      const expectedTime = roomPlaybackTime + effectiveLatency;
+
+      const incomingTrackId = data.room.track_id || data.room.current_track_id;
+      const incomingYtId = data.room.youtube_id || (incomingTrackId && incomingTrackId.length === 11 ? incomingTrackId : null);
+
+      // 1. Synchronize track ONLY IF a NEW track is received from server
+      if (incomingYtId && incomingYtId !== lastSyncedYtId) {
+        lastSyncedYtId = incomingYtId;
+        const newTrack: ITrack = {
+          id: incomingTrackId || incomingYtId,
+          youtube_id: incomingYtId,
+          title: data.room.track_title || 'Room Song',
+          artist: data.room.track_artist || 'AuraStream Artist',
+          thumbnail_url: data.room.track_thumbnail || '',
+          duration: Number(data.room.track_duration) || 180,
+        };
+        player.playTrack(newTrack);
+        if (expectedTime > 0 && expectedTime < (newTrack.duration || 180) - 5) {
+          player.seekTo(expectedTime);
+        }
+      } else if (!incomingYtId && lastSyncedYtId) {
+        // Room track was cleared (e.g. skipped last track in queue)
+        lastSyncedYtId = null;
+        player.setPlaying(false);
+      } else if (!isHost && player.currentTrack && player.currentTrack.youtube_id === incomingYtId) {
+        // 2. Listeners synchronize play/pause only if player is active
+        if (player.isPlaying !== roomIsPlaying) {
+          player.setPlaying(roomIsPlaying);
+        }
+
+        // 3. Drift correction ONLY IF within valid song duration and significant drift
+        const trackDuration = player.duration || Number(data.room.track_duration) || 180;
+        if (expectedTime < trackDuration - 5 && syncAge <= 10) {
+          const drift = Math.abs(player.currentTime - expectedTime);
+          // 4-second drift tolerance to prevent continuous seeking / buffering loops
+          if (drift > 4) {
+            player.seekTo(expectedTime);
           }
         }
       }
@@ -433,5 +465,82 @@ export const useRoomStore = create<RoomState>((set, get) => ({
         },
       });
     } catch {}
+  },
+
+  skipTrack: async () => {
+    const { currentRoom } = get();
+    if (!currentRoom) return;
+
+    try {
+      const data = await roomService.skipTrack(currentRoom.id);
+      if (data?.nextTrack) {
+        const nextTrack = data.nextTrack;
+        lastSyncedYtId = nextTrack.youtube_id;
+
+        const player = usePlayerStore.getState();
+        player.playTrack(nextTrack);
+        player.seekTo(0);
+        set({ isLocallyPaused: false });
+        player.setPlaying(true);
+
+        if (syncChannel) {
+          try {
+            syncChannel.postMessage({
+              type: 'NEXT_TRACK',
+              roomId: currentRoom.id,
+              track: nextTrack,
+              isPlaying: true,
+              playbackTime: 0,
+              timestamp: Date.now(),
+              senderId: useAuthStore.getState().user?.id,
+            });
+          } catch {}
+        }
+
+        await get().pollRoomState();
+      } else {
+        // Room queue is now empty: stop local player and clear
+        lastSyncedYtId = null;
+        const player = usePlayerStore.getState();
+        player.setPlaying(false);
+        if (syncChannel) {
+          try {
+            syncChannel.postMessage({
+              type: 'PAUSE',
+              roomId: currentRoom.id,
+              isPlaying: false,
+              playbackTime: 0,
+              timestamp: Date.now(),
+              senderId: useAuthStore.getState().user?.id,
+            });
+          } catch {}
+        }
+        await get().pollRoomState();
+      }
+    } catch (e) {
+      console.warn('Failed to skip track:', e);
+    }
+  },
+
+  deleteCurrentRoom: async () => {
+    const { currentRoom } = get();
+    if (!currentRoom) return;
+
+    try {
+      await roomService.deleteRoom(currentRoom.id);
+      if (syncChannel) {
+        try {
+          syncChannel.postMessage({
+            type: 'ROOM_CLOSED',
+            roomId: currentRoom.id,
+            timestamp: Date.now(),
+          });
+        } catch {}
+      }
+    } catch (e) {
+      console.warn('Failed to delete room:', e);
+    } finally {
+      get().leaveRoom();
+    }
   },
 }));

@@ -32,7 +32,6 @@ export const CreateRoomPage: React.FC = () => {
   const [djMode, setDjMode] = useState<'collaborative' | 'host_only'>('collaborative');
   const [isPublic, setIsPublic] = useState(true);
   const [voiceEnabled, setVoiceEnabled] = useState(true);
-  const [includeCurrentTrack, setIncludeCurrentTrack] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -65,7 +64,6 @@ export const CreateRoomPage: React.FC = () => {
         description: description.trim(),
         djMode,
         isPublic,
-        initialTrack: includeCurrentTrack && currentTrack ? currentTrack : undefined,
       });
 
       if (networkMode === 'hotspot') {
@@ -330,32 +328,7 @@ export const CreateRoomPage: React.FC = () => {
           </div>
         </div>
 
-        {/* 6. Initial Track Selector */}
-        {currentTrack && (
-          <div className="p-4 rounded-2xl bg-zinc-900/60 border border-zinc-800/80 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3 min-w-0">
-              <img
-                src={currentTrack.thumbnail_url}
-                alt={currentTrack.title}
-                className="w-12 h-12 rounded-xl object-cover border border-white/10 flex-shrink-0"
-              />
-              <div className="min-w-0">
-                <span className="text-[10px] text-zinc-400 uppercase font-bold tracking-wider">Start with currently playing</span>
-                <p className="text-xs sm:text-sm font-bold text-white truncate">{currentTrack.title}</p>
-                <p className="text-[11px] text-zinc-400 truncate">{currentTrack.artist}</p>
-              </div>
-            </div>
-            <label className="relative inline-flex items-center cursor-pointer flex-shrink-0">
-              <input
-                type="checkbox"
-                checked={includeCurrentTrack}
-                onChange={(e) => setIncludeCurrentTrack(e.target.checked)}
-                className="sr-only peer"
-              />
-              <div className="w-11 h-6 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-rose-500"></div>
-            </label>
-          </div>
-        )}
+
 
         {/* Form Bottom Action Buttons */}
         <div className="pt-4 flex items-center justify-end gap-3 border-t border-zinc-800">

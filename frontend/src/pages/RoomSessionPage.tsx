@@ -8,7 +8,7 @@ import { voiceChatService } from '../services/voiceChatService';
 import { roomService, RoomDetailsResponse } from '../services/roomService';
 import { AddSongToRoomModal } from '../components/room/AddSongToRoomModal';
 import { Button } from '../components/common/Button';
-import { IRoomMember, IRoomQueueItem, IRoomMessage } from '../types';
+import { IRoomMember, IRoomQueueItem, IRoomMessage, ITrack } from '../types';
 import {
   Radio,
   Users,
@@ -32,13 +32,18 @@ import {
   Wifi,
   HardDrive,
   Headphones,
+  Trash2,
 } from 'lucide-react';
 
 function formatSeconds(sec: number): string {
-  if (isNaN(sec) || sec <= 0) return '0:00';
-  const m = Math.floor(sec / 60);
-  const s = Math.floor(sec % 60);
-  return `${m}:${s < 10 ? '0' : ''}${s}`;
+  if (isNaN(sec) || sec <= 0 || !isFinite(sec)) return '0:00';
+  const hrs = Math.floor(sec / 3600);
+  const mins = Math.floor((sec % 3600) / 60);
+  const secs = Math.floor(sec % 60);
+  if (hrs > 0) {
+    return `${hrs}:${mins < 10 ? '0' : ''}${mins}:${secs < 10 ? '0' : ''}${secs}`;
+  }
+  return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
 }
 
 const REACTION_EMOJIS = ['🔥', '❤️', '🎵', '✨', '⚡'];
@@ -73,6 +78,8 @@ export const RoomSessionPage: React.FC = () => {
     sendMessage,
     sendReaction,
     addTrackToQueue,
+    skipTrack,
+    deleteCurrentRoom,
   } = useRoomStore();
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -251,15 +258,8 @@ export const RoomSessionPage: React.FC = () => {
     broadcastSync(isPlaying ? 'PAUSE' : 'PLAY', { isPlaying: !isPlaying, time: currentTime });
   };
 
-  const handleSkipNext = () => {
-    if (queue.length > 0) {
-      const nextSong = queue[0];
-      usePlayerStore.getState().playTrack(nextSong);
-      broadcastSync('NEXT_TRACK', { track: nextSong, isPlaying: true, time: 0 });
-    } else {
-      nextTrack();
-      broadcastSync('NEXT_TRACK', { isPlaying: true, time: 0 });
-    }
+  const handleSkipNext = async () => {
+    await skipTrack();
   };
 
   if (isLoading) {
@@ -284,14 +284,20 @@ export const RoomSessionPage: React.FC = () => {
     );
   }
 
-  const activeSong = currentTrack || {
-    id: currentRoom.track_id || 'room_track',
-    youtube_id: currentRoom.youtube_id || '5qap5aO4i9A',
-    title: currentRoom.track_title || 'Room Stream',
-    artist: currentRoom.track_artist || 'AuraStream Artist',
-    thumbnail_url: currentRoom.track_thumbnail || 'https://i.ytimg.com/vi/5qap5aO4i9A/mqdefault.jpg',
-    duration: currentRoom.track_duration || 180,
-  };
+  const roomTrackYt = currentRoom.youtube_id || (currentRoom.current_track_id && currentRoom.current_track_id.length === 11 ? currentRoom.current_track_id : null);
+  const activeSong: ITrack | null =
+    (currentTrack && (currentTrack.youtube_id === roomTrackYt || (!roomTrackYt && currentRoom.track_id === currentTrack.id)))
+      ? currentTrack
+      : (roomTrackYt || currentRoom.track_title)
+      ? {
+          id: currentRoom.track_id || currentRoom.current_track_id || roomTrackYt || 'room_track',
+          youtube_id: roomTrackYt || '',
+          title: currentRoom.track_title || 'Room Stream',
+          artist: currentRoom.track_artist || 'AuraStream Artist',
+          thumbnail_url: currentRoom.track_thumbnail || '',
+          duration: currentRoom.track_duration || 180,
+        }
+      : null;
 
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
   const canControl = isHost || currentRoom.dj_mode === 'collaborative';
@@ -360,11 +366,29 @@ export const RoomSessionPage: React.FC = () => {
             </span>
           </div>
 
+          {isHost && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={async () => {
+                if (window.confirm('Are you sure you want to permanently delete this room? All participants will be disconnected.')) {
+                  await deleteCurrentRoom();
+                  navigate('/rooms');
+                }
+              }}
+              className="flex items-center gap-1.5 text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 border border-rose-500/20 cursor-pointer"
+              title="Permanently delete room for all listeners"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Delete Room</span>
+            </Button>
+          )}
+
           <Button
             variant="ghost"
             size="sm"
             onClick={handleLeave}
-            className="flex items-center gap-1.5 text-xs text-rose-400 hover:text-rose-300"
+            className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white cursor-pointer"
           >
             <LogOut className="w-3.5 h-3.5" />
             <span>Leave Session</span>
@@ -438,7 +462,7 @@ export const RoomSessionPage: React.FC = () => {
 
               <p className="text-[11px] text-zinc-400 truncate mt-0.5">
                 {isBroadcastingMusic
-                  ? '📻 Broadcasting live audio (Spotify / YouTube Music / Device) in high-fidelity stereo to all hotspot listeners'
+                  ? '📻 Broadcasting live device audio digitally (Android AudioPlaybackCapture). Note: DRM-restricted tracks from external apps are muted by Android OS; use "+ Add Songs to Queue" for guaranteed sync!'
                   : isSpeaking
                   ? '🎤 You are speaking — music volume auto-ducked to 25%'
                   : activeSpeakers.length > 0
@@ -447,7 +471,7 @@ export const RoomSessionPage: React.FC = () => {
                   ? isPushToTalk
                     ? 'Push-to-Talk active: Hold Spacebar or click & hold [Speak] button'
                     : 'Open mic active with Smart Ducking: music automatically lowers when you speak'
-                  : 'Share music from Spotify or talk live with friends over Wi-Fi hotspot with zero internet.'}
+                  : 'Talk live with friends or broadcast device music with Android internal audio capture.'}
               </p>
 
               {micError && (
@@ -553,15 +577,15 @@ export const RoomSessionPage: React.FC = () => {
               </>
             ) : (
               <>
-                {/* Broadcast Device Music (Spotify, YT Music, etc.) */}
+                {/* Broadcast Line/Tab Audio */}
                 <button
                   type="button"
                   onClick={handleStartBroadcast}
                   className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 text-xs font-semibold transition-all cursor-pointer active:scale-95"
-                  title="Broadcast music playing from Spotify or device to the room"
+                  title="Broadcast live audio to the room"
                 >
                   <Radio className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Broadcast Device Music</span>
+                  <span>Broadcast Audio</span>
                 </button>
 
                 {/* Join Voice Chat */}
@@ -635,156 +659,187 @@ export const RoomSessionPage: React.FC = () => {
       </div>
 
       {/* 2. Main Synchronized Stage */}
-      <div className="relative rounded-3xl overflow-hidden bg-zinc-900/40 border border-zinc-850 p-6 md:p-8 shadow-sm">
-        {/* Floating Reaction Overlay */}
-        {activeReaction && (
-          <div className="absolute inset-0 pointer-events-none flex items-center justify-center z-20 animate-in zoom-in-50 fade-in duration-300">
-            <span className="text-7xl md:text-8xl drop-shadow-2xl animate-bounce">
-              {activeReaction.emoji}
-            </span>
+      {!activeSong ? (
+        <div className="relative rounded-3xl overflow-hidden bg-zinc-900/40 border border-zinc-850 p-8 md:p-12 text-center shadow-sm">
+          <div className="max-w-md mx-auto space-y-4">
+            <div className="w-16 h-16 rounded-2xl bg-zinc-800/80 border border-zinc-700/60 flex items-center justify-center mx-auto text-zinc-400">
+              <Radio className="w-8 h-8 stroke-1 text-zinc-400" />
+            </div>
+            <div>
+              <h3 className="text-lg md:text-xl font-bold text-white">No Song Playing Right Now</h3>
+              <p className="text-xs md:text-sm text-zinc-400 mt-1">
+                This room is waiting for music! Add songs to the queue or search YouTube to start the synchronized session.
+              </p>
+            </div>
+            <div className="pt-2">
+              <Button
+                variant="primary"
+                size="md"
+                onClick={() => setIsAddModalOpen(true)}
+                className="inline-flex items-center gap-2 bg-gradient-to-r from-rose-500 to-purple-600 hover:from-rose-400 hover:to-purple-500 text-white font-semibold text-xs sm:text-sm shadow-lg shadow-rose-500/20 cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Add Songs to Queue</span>
+              </Button>
+            </div>
           </div>
-        )}
+        </div>
+      ) : (
+        <div className="relative rounded-3xl overflow-hidden bg-zinc-900/40 border border-zinc-850 p-6 md:p-8 shadow-sm">
+          {/* Floating Reaction Overlay */}
+          {activeReaction && (
+            <div className="absolute inset-0 pointer-events-none flex items-center justify-center z-20 animate-in zoom-in-50 fade-in duration-300">
+              <span className="text-7xl md:text-8xl drop-shadow-2xl animate-bounce">
+                {activeReaction.emoji}
+              </span>
+            </div>
+          )}
 
-        <div className="flex flex-col md:flex-row items-center gap-6 md:gap-8">
-          {/* Track Thumbnail */}
-          <div className="relative w-40 h-40 md:w-48 md:h-48 rounded-2xl overflow-hidden shadow-lg border border-white/10 bg-zinc-950 flex-shrink-0">
-            <img
-              src={activeSong.thumbnail_url}
-              alt={activeSong.title}
-              className="w-full h-full object-cover"
-            />
-            {isPlaying && (
-              <div className="absolute top-2.5 right-2.5 px-2 py-1 rounded-md bg-black/70 backdrop-blur-sm flex items-end gap-1 h-4">
-                <div className="wave-bar" />
-                <div className="wave-bar" />
-                <div className="wave-bar" />
-              </div>
-            )}
-          </div>
-
-          {/* Track Metadata & Synced Player Controls */}
-          <div className="flex-1 text-center md:text-left space-y-3 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap justify-center md:justify-start">
-              <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold ${
-                isLocallyPaused || !isPlaying
-                  ? 'bg-amber-500/15 border border-amber-500/30 text-amber-300'
-                  : 'bg-zinc-800/80 border border-zinc-700/60 text-zinc-300'
-              }`}>
-                <Volume2 className={`w-3.5 h-3.5 ${isLocallyPaused || !isPlaying ? 'text-amber-400' : 'text-emerald-400'}`} />
-                <span>{isLocallyPaused ? 'Local Playback Stopped / Paused' : isPlaying ? 'Playing Live in Room' : 'Room Stream Paused'}</span>
-              </div>
-
-              {isLocallyPaused && (
-                <span className="text-[11px] text-amber-400/90 font-medium">
-                  • Click Resume to catch up with latest room timeline
-                </span>
+          <div className="flex flex-col md:flex-row items-center gap-6 md:gap-8">
+            {/* Track Thumbnail */}
+            <div className="relative w-40 h-40 md:w-48 md:h-48 rounded-2xl overflow-hidden shadow-lg border border-white/10 bg-zinc-950 flex-shrink-0">
+              <img
+                src={activeSong.thumbnail_url || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400&auto=format&fit=crop&q=80'}
+                alt={activeSong.title}
+                className="w-full h-full object-cover"
+              />
+              {isPlaying && (
+                <div className="absolute top-2.5 right-2.5 px-2 py-1 rounded-md bg-black/70 backdrop-blur-sm flex items-end gap-1 h-4">
+                  <div className="wave-bar" />
+                  <div className="wave-bar" />
+                  <div className="wave-bar" />
+                </div>
               )}
             </div>
 
-            <h3 className="text-xl md:text-3xl font-bold text-white tracking-tight line-clamp-2">
-              {activeSong.title}
-            </h3>
+            {/* Track Metadata & Synced Player Controls */}
+            <div className="flex-1 text-center md:text-left space-y-3 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap justify-center md:justify-start">
+                <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold ${
+                  isLocallyPaused || !isPlaying
+                    ? 'bg-amber-500/15 border border-amber-500/30 text-amber-300'
+                    : 'bg-zinc-800/80 border border-zinc-700/60 text-zinc-300'
+                }`}>
+                  <Volume2 className={`w-3.5 h-3.5 ${isLocallyPaused || !isPlaying ? 'text-amber-400' : 'text-emerald-400'}`} />
+                  <span>{isLocallyPaused ? 'Local Playback Stopped / Paused' : isPlaying ? 'Playing Live in Room' : 'Room Stream Paused'}</span>
+                </div>
 
-            <p className="text-sm text-zinc-400 font-medium">{activeSong.artist}</p>
-
-            {/* Synced Timeline Progress Bar */}
-            <div className="space-y-1.5 pt-1">
-              <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-white transition-all duration-300"
-                  style={{ width: `${progressPercent}%` }}
-                />
+                {isLocallyPaused && (
+                  <span className="text-[11px] text-amber-400/90 font-medium">
+                    • Click Resume to catch up with latest room timeline
+                  </span>
+                )}
               </div>
-              <div className="flex items-center justify-between text-[11px] font-mono text-zinc-400">
-                <span>{formatSeconds(currentTime)}</span>
-                <span>{formatSeconds(duration || activeSong.duration)}</span>
-              </div>
-            </div>
 
-            {/* Playback & Reaction Controls */}
-            <div className="flex flex-wrap items-center justify-center md:justify-start gap-3 pt-2">
-              {canControl ? (
-                <>
+              <h3 className="text-xl md:text-3xl font-bold text-white tracking-tight line-clamp-2">
+                {activeSong.title}
+              </h3>
+
+              <p className="text-sm text-zinc-400 font-medium">{activeSong.artist}</p>
+
+              {/* Synced Timeline Progress Bar */}
+              <div className="space-y-1.5 pt-1">
+                <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-white transition-all duration-300"
+                    style={{ width: `${progressPercent}%` }}
+                  />
+                </div>
+                <div className="flex items-center justify-between text-[11px] font-mono text-zinc-400">
+                  <span className="tabular-nums">{formatSeconds(currentTime)}</span>
+                  <span className="tabular-nums">{duration > 43200 ? 'LIVE' : formatSeconds(duration || activeSong.duration)}</span>
+                </div>
+              </div>
+
+              {/* Playback & Reaction Controls */}
+              <div className="flex flex-wrap items-center justify-center md:justify-start gap-3 pt-2">
+                {/* 1. Local Audio Controls (For Me) */}
+                {isLocallyPaused || !isPlaying ? (
                   <Button
                     variant="primary"
                     size="md"
-                    onClick={handleTogglePlayback}
-                    className="flex items-center gap-2"
+                    onClick={resumeAndSyncWithRoom}
+                    className="flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-black font-bold shadow-lg shadow-emerald-500/25 cursor-pointer"
+                    title="Catch up with live room timeline and start listening"
                   >
-                    {isPlaying ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current ml-0.5" />}
-                    <span>{isPlaying ? 'Pause Sync (All)' : 'Play Sync (All)'}</span>
+                    <Play className="w-4 h-4 fill-current ml-0.5" />
+                    <span>Resume for Me</span>
                   </Button>
-
+                ) : (
                   <Button
                     variant="secondary"
                     size="md"
-                    onClick={handleSkipNext}
-                    className="flex items-center gap-1.5"
+                    onClick={() => {
+                      setLocallyPaused(true);
+                      usePlayerStore.getState().setPlaying(false);
+                    }}
+                    className="flex items-center gap-2 text-zinc-200 hover:text-white border border-zinc-700 bg-zinc-850 hover:bg-zinc-800 cursor-pointer"
+                    title="Pause music on your device only without affecting other listeners"
                   >
-                    <SkipForward className="w-4 h-4" />
-                    <span>Skip Track</span>
+                    <Pause className="w-4 h-4 fill-current" />
+                    <span>Pause for Me</span>
                   </Button>
-                </>
-              ) : (
-                /* Listener Individual Controls */
-                <>
-                  {isLocallyPaused || !isPlaying ? (
+                )}
+
+                {/* 2. Room Synced Controls (For Everyone) */}
+                {canControl && (
+                  <>
                     <Button
-                      variant="primary"
+                      variant="ghost"
                       size="md"
-                      onClick={resumeAndSyncWithRoom}
-                      className="flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-black font-bold shadow-lg shadow-emerald-500/25"
+                      onClick={handleTogglePlayback}
+                      className="flex items-center gap-2 text-zinc-300 hover:text-white border border-zinc-800 hover:border-zinc-700 cursor-pointer"
+                      title={isPlaying ? 'Pause music playback for everyone in this room' : 'Resume music playback for everyone in this room'}
                     >
-                      <Play className="w-4 h-4 fill-current ml-0.5" />
-                      <span>Resume & Catch Up Live Stream</span>
+                      {isPlaying ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current ml-0.5" />}
+                      <span>{isPlaying ? 'Pause All' : 'Play All'}</span>
                     </Button>
-                  ) : (
+
                     <Button
                       variant="secondary"
                       size="md"
-                      onClick={() => {
-                        setLocallyPaused(true);
-                        togglePlay();
-                      }}
-                      className="flex items-center gap-2 text-zinc-300 hover:text-white"
-                      title="Stop music streaming on your device only without affecting other listeners"
+                      onClick={handleSkipNext}
+                      className="flex items-center gap-1.5 cursor-pointer"
+                      title="Skip track for everyone in this room"
                     >
-                      <Pause className="w-4 h-4 fill-current" />
-                      <span>Pause for Me</span>
+                      <SkipForward className="w-4 h-4" />
+                      <span>Skip Track</span>
                     </Button>
-                  )}
-                </>
-              )}
+                  </>
+                )}
 
-              {/* YouTube Direct Attribution */}
-              <a
-                href={`https://www.youtube.com/watch?v=${activeSong.youtube_id}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-zinc-300 hover:text-white text-xs font-medium transition-colors"
-                title="Watch on official YouTube"
-              >
-                <ExternalLink className="w-3.5 h-3.5 text-red-500" />
-                <span>Watch on YouTube</span>
-              </a>
-
-              {/* Live Emoji Reactions */}
-              <div className="flex items-center gap-1 p-1 rounded-full bg-zinc-900/80 border border-zinc-800">
-                {REACTION_EMOJIS.map((emoji) => (
-                  <button
-                    key={emoji}
-                    onClick={() => sendReaction(emoji)}
-                    className="p-1.5 hover:scale-125 transition-transform text-sm cursor-pointer"
-                    title={`Send ${emoji} reaction`}
+                {/* YouTube Direct Attribution */}
+                {activeSong.youtube_id && (
+                  <a
+                    href={`https://www.youtube.com/watch?v=${activeSong.youtube_id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-zinc-300 hover:text-white text-xs font-medium transition-colors"
+                    title="Watch on official YouTube"
                   >
-                    {emoji}
-                  </button>
-                ))}
+                    <ExternalLink className="w-3.5 h-3.5 text-red-500" />
+                    <span>Watch on YouTube</span>
+                  </a>
+                )}
+
+                {/* Live Emoji Reactions */}
+                <div className="flex items-center gap-1 p-1 rounded-full bg-zinc-900/80 border border-zinc-800">
+                  {REACTION_EMOJIS.map((emoji) => (
+                    <button
+                      key={emoji}
+                      onClick={() => sendReaction(emoji)}
+                      className="p-1.5 hover:scale-125 transition-transform text-sm cursor-pointer"
+                      title={`Send ${emoji} reaction`}
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* 3. Lower Grid: Collaborative Queue & In-Room Chat */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">

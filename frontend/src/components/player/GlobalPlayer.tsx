@@ -30,9 +30,13 @@ import { useAuthStore } from '../../store/useAuthStore';
 import { useUIStore } from '../../store/useUIStore';
 
 function formatSeconds(seconds: number): string {
-  if (isNaN(seconds) || seconds < 0) return '0:00';
-  const mins = Math.floor(seconds / 60);
+  if (isNaN(seconds) || seconds < 0 || !isFinite(seconds)) return '0:00';
+  const hrs = Math.floor(seconds / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
   const secs = Math.floor(seconds % 60);
+  if (hrs > 0) {
+    return `${hrs}:${mins < 10 ? '0' : ''}${mins}:${secs < 10 ? '0' : ''}${secs}`;
+  }
   return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
 }
 
@@ -105,20 +109,11 @@ export const GlobalPlayer: React.FC = () => {
 
   const handleTogglePlay = () => {
     if (currentRoom) {
-      if (isHost || currentRoom.dj_mode === 'collaborative') {
+      if (isPlaying) {
+        setLocallyPaused(true);
         togglePlay();
-        broadcastSync(isPlaying ? 'PAUSE' : 'PLAY', {
-          isPlaying: !isPlaying,
-          time: currentTime,
-          track: currentTrack,
-        });
       } else {
-        if (isPlaying) {
-          setLocallyPaused(true);
-          togglePlay();
-        } else {
-          resumeAndSyncWithRoom();
-        }
+        resumeAndSyncWithRoom();
       }
       return;
     }
@@ -154,19 +149,14 @@ export const GlobalPlayer: React.FC = () => {
   };
 
   const handleNext = () => {
-    nextTrack();
     if (currentRoom) {
       if (currentRoom.dj_mode === 'collaborative' || isHost) {
-        setTimeout(() => {
-          const fresh = usePlayerStore.getState().currentTrack;
-          broadcastSync('NEXT_TRACK', {
-            isPlaying: true,
-            time: 0,
-            track: fresh,
-          });
-        }, 100);
+        useRoomStore.getState().skipTrack();
+        return;
       }
     }
+
+    nextTrack();
     if (isPartyActive) {
       setTimeout(() => {
         const fresh = usePlayerStore.getState().currentTrack;
@@ -385,9 +375,11 @@ export const GlobalPlayer: React.FC = () => {
         </div>
 
         {/* Timeline Scrubber */}
-        <div className="w-full flex items-center gap-2.5 text-xs text-zinc-400 font-mono">
-          <span className="w-9 text-right text-[11px]">{formatSeconds(currentTime)}</span>
-          <div className="relative flex-1 flex items-center group cursor-pointer py-1.5">
+        <div className="w-full flex items-center gap-3 text-xs text-zinc-400 font-mono">
+          <span className="min-w-[44px] shrink-0 text-right text-[11px] tabular-nums select-none">
+            {formatSeconds(currentTime)}
+          </span>
+          <div className="relative flex-1 min-w-0 flex items-center group cursor-pointer py-1.5">
             <input
               type="range"
               min="0"
@@ -398,7 +390,9 @@ export const GlobalPlayer: React.FC = () => {
               className="w-full h-1 bg-zinc-800 rounded-full appearance-none outline-none cursor-pointer accent-white group-hover:h-1.5 transition-all"
             />
           </div>
-          <span className="w-9 text-[11px]">{formatSeconds(duration)}</span>
+          <span className="min-w-[44px] shrink-0 text-left text-[11px] tabular-nums select-none">
+            {duration > 43200 ? 'LIVE' : formatSeconds(duration)}
+          </span>
         </div>
       </div>
 

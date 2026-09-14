@@ -1,6 +1,7 @@
 import { usePlayerStore } from '../store/usePlayerStore';
 import { roomService } from './roomService';
 import { IRoomVoicePeer, IRoomVoiceSignal } from '../types';
+import { systemAudioBridge } from './systemAudioBridge';
 
 type SpeechCallback = (isSpeaking: boolean, speakerName: string) => void;
 type PeersCallback = (peers: IRoomVoicePeer[]) => void;
@@ -189,7 +190,37 @@ class VoiceChatService {
    * Broadcast device audio (Spotify, YouTube Music, local media) to the hotspot room
    */
   async startDeviceMusicBroadcast(): Promise<MediaStream> {
-    // Try system audio capture via getDisplayMedia if available (Chromium / Android Chrome)
+    // 1. Try native Android system audio capture (Capacitor Android 10+ AudioPlaybackCapture)
+    try {
+      const isNativeAndroid = await systemAudioBridge.isSupported();
+      if (isNativeAndroid) {
+        const stream = await systemAudioBridge.startCapture();
+        if (this.localStream) {
+          this.localStream.getTracks().forEach((t) => t.stop());
+        }
+        this.localStream = stream;
+        this.audioMode = 'music_broadcast';
+        this.initVoiceActivityDetection(stream, false);
+
+        const track = stream.getAudioTracks()[0];
+        if (track) {
+          track.enabled = !this.isMuted;
+          this.peerConnections.forEach((pc) => {
+            const sender = pc.getSenders().find((s) => s.track && s.track.kind === 'audio');
+            if (sender) {
+              sender.replaceTrack(track).catch(() => {});
+            } else {
+              pc.addTrack(track, stream);
+            }
+          });
+        }
+        return stream;
+      }
+    } catch (e: any) {
+      console.info('Native system audio capture not started or canceled:', e?.message || e);
+    }
+
+    // 2. Try system audio capture via getDisplayMedia if available (Chromium / Desktop browsers)
     if (navigator.mediaDevices && typeof (navigator.mediaDevices as any).getDisplayMedia === 'function') {
       try {
         const displayStream: MediaStream = await (navigator.mediaDevices as any).getDisplayMedia({
@@ -222,6 +253,8 @@ class VoiceChatService {
               const sender = pc.getSenders().find((s) => s.track && s.track.kind === 'audio');
               if (sender) {
                 sender.replaceTrack(track).catch(() => {});
+              } else {
+                pc.addTrack(track, audioStream);
               }
             });
           }
@@ -240,6 +273,8 @@ class VoiceChatService {
    * Stop microphone and release media tracks
    */
   stopMicrophone(): void {
+    systemAudioBridge.stopCapture().catch(() => {});
+
     if (this.animFrameId) {
       cancelAnimationFrame(this.animFrameId);
       this.animFrameId = null;
@@ -318,7 +353,11 @@ class VoiceChatService {
 
     // 1. Acquire Local Audio Track
     try {
-      await this.startMicrophone(mode);
+      if (mode === 'music_broadcast') {
+        await this.startDeviceMusicBroadcast();
+      } else {
+        await this.startMicrophone(mode);
+      }
     } catch (err: any) {
       this.setStatus('error', err?.message || 'Could not access microphone');
       throw err;

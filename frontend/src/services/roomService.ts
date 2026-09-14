@@ -94,6 +94,15 @@ export const roomService = {
     } catch {}
   },
 
+  async deleteRoom(roomId: string): Promise<void> {
+    await api.delete(`/rooms/${encodeURIComponent(roomId)}`);
+  },
+
+  async skipTrack(roomId: string): Promise<{ nextTrack: ITrack }> {
+    const res = await api.post(`/rooms/${encodeURIComponent(roomId)}/skip`);
+    return res.data?.data;
+  },
+
   // WebRTC Room Voice Chat Signaling Methods
   async joinVoice(
     roomId: string,

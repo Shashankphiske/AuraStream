@@ -22,6 +22,7 @@ interface PlayerState {
 
   // Actions
   playTrack: (track: ITrack, newQueue?: ITrack[]) => void;
+  setTrackWithoutPlaying: (track: ITrack) => void;
   togglePlay: () => void;
   setPlaying: (playing: boolean) => void;
   setVolume: (volume: number) => void;
@@ -97,6 +98,16 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
     // Log playback to backend history asynchronously
     historyService.logPlay(track, 0).catch(() => {});
+  },
+
+  setTrackWithoutPlaying: (track) => {
+    set({
+      currentTrack: track,
+      isPlaying: false,
+      currentTime: 0,
+      duration: track.duration || 0,
+      playbackNotice: null,
+    });
   },
 
   togglePlay: () => {

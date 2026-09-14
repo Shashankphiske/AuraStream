@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { usePlayerStore } from '../../store/usePlayerStore';
+import { useRoomStore } from '../../store/useRoomStore';
 import {
   ExternalLink,
   Maximize2,
@@ -78,23 +79,42 @@ export const YouTubePlayerBridge: React.FC = () => {
         playerRef.current = new window.YT.Player('aura-yt-player', {
           height: '100%',
           width: '100%',
-          videoId: currentTrack?.youtube_id || '5qap5aO4i9A',
+          videoId: currentTrack?.youtube_id || '',
           playerVars,
           events: {
             onReady: (event: any) => {
               isReadyRef.current = true;
               event.target.setVolume(isMuted ? 0 : volume);
-              if (pendingTrackIdRef.current) {
-                const targetId = pendingTrackIdRef.current;
+              const targetId = pendingTrackIdRef.current || currentTrack?.youtube_id;
+              if (targetId) {
                 pendingTrackIdRef.current = null;
-                event.target.loadVideoById(targetId);
-                event.target.playVideo();
-                setPlaying(true);
+                const isLocallyPaused = useRoomStore.getState().isLocallyPaused;
+                if (isLocallyPaused || !isPlaying) {
+                  if (event.target.cueVideoById) {
+                    event.target.cueVideoById(targetId);
+                  }
+                  try {
+                    event.target.pauseVideo();
+                  } catch {}
+                  setPlaying(false);
+                } else {
+                  event.target.loadVideoById(targetId);
+                  event.target.playVideo();
+                  setPlaying(true);
+                }
               }
             },
             onStateChange: (event: any) => {
               if (window.YT && window.YT.PlayerState) {
                 if (event.data === window.YT.PlayerState.PLAYING) {
+                  const isLocallyPaused = useRoomStore.getState().isLocallyPaused;
+                  if (isLocallyPaused) {
+                    try {
+                      playerRef.current?.pauseVideo();
+                    } catch {}
+                    setPlaying(false);
+                    return;
+                  }
                   setPlaying(true);
                   setPlaybackNotice(null);
                   if (playerRef.current?.getDuration) {
@@ -104,7 +124,14 @@ export const YouTubePlayerBridge: React.FC = () => {
                 } else if (event.data === window.YT.PlayerState.PAUSED) {
                   setPlaying(false);
                 } else if (event.data === window.YT.PlayerState.ENDED) {
-                  nextTrack();
+                  const roomState = useRoomStore.getState();
+                  if (roomState.currentRoom) {
+                    if (roomState.isHost || roomState.currentRoom.dj_mode === 'collaborative') {
+                      roomState.skipTrack();
+                    }
+                  } else {
+                    nextTrack();
+                  }
                 }
               }
             },
@@ -190,11 +217,26 @@ export const YouTubePlayerBridge: React.FC = () => {
         localAudioRef.current.pause();
       }
 
-      if (playerRef.current && isReadyRef.current && playerRef.current.loadVideoById) {
+      if (playerRef.current && isReadyRef.current) {
         try {
-          playerRef.current.loadVideoById(currentTrack.youtube_id);
-          playerRef.current.playVideo();
-          setPlaying(true);
+          const isLocallyPaused = useRoomStore.getState().isLocallyPaused;
+          if (isLocallyPaused || !isPlaying) {
+            if (playerRef.current.cueVideoById) {
+              playerRef.current.cueVideoById(currentTrack.youtube_id);
+            }
+            if (playerRef.current.pauseVideo) {
+              playerRef.current.pauseVideo();
+            }
+            setPlaying(false);
+          } else {
+            if (playerRef.current.loadVideoById) {
+              playerRef.current.loadVideoById(currentTrack.youtube_id);
+            }
+            if (playerRef.current.playVideo) {
+              playerRef.current.playVideo();
+            }
+            setPlaying(true);
+          }
           setPlaybackNotice(null);
         } catch (e) {
           console.warn('Error loading video in YT Player:', e);
@@ -207,9 +249,10 @@ export const YouTubePlayerBridge: React.FC = () => {
 
   // 3. Handle Play / Pause sync
   useEffect(() => {
+    const isLocallyPaused = useRoomStore.getState().isLocallyPaused;
     if (currentTrack?.is_local) {
       if (localAudioRef.current) {
-        if (isPlaying) {
+        if (isPlaying && !isLocallyPaused) {
           localAudioRef.current.play().catch(() => {});
         } else {
           localAudioRef.current.pause();
@@ -218,7 +261,7 @@ export const YouTubePlayerBridge: React.FC = () => {
     } else {
       if (!playerRef.current || !isReadyRef.current || !playerRef.current.playVideo) return;
       try {
-        if (isPlaying) {
+        if (isPlaying && !isLocallyPaused) {
           playerRef.current.playVideo();
         } else {
           playerRef.current.pauseVideo();
@@ -259,9 +302,16 @@ export const YouTubePlayerBridge: React.FC = () => {
       navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
 
       navigator.mediaSession.setActionHandler('play', () => {
-        setPlaying(true);
+        if (useRoomStore.getState().currentRoom) {
+          useRoomStore.getState().resumeAndSyncWithRoom();
+        } else {
+          setPlaying(true);
+        }
       });
       navigator.mediaSession.setActionHandler('pause', () => {
+        if (useRoomStore.getState().currentRoom) {
+          useRoomStore.getState().setLocallyPaused(true);
+        }
         setPlaying(false);
       });
       navigator.mediaSession.setActionHandler('nexttrack', () => {

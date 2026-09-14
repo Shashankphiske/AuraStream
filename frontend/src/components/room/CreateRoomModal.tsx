@@ -25,7 +25,6 @@ export const CreateRoomModal: React.FC<CreateRoomModalProps> = ({ isOpen, onClos
   const [djMode, setDjMode] = useState<'collaborative' | 'host_only'>('collaborative');
   const [isPublic, setIsPublic] = useState(true);
   const [voiceEnabled, setVoiceEnabled] = useState(true);
-  const [includeCurrentTrack, setIncludeCurrentTrack] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
 
   if (!isOpen) return null;
@@ -41,7 +40,6 @@ export const CreateRoomModal: React.FC<CreateRoomModalProps> = ({ isOpen, onClos
         description: description.trim(),
         djMode,
         isPublic,
-        initialTrack: includeCurrentTrack && currentTrack ? currentTrack : undefined,
       });
 
       if (networkMode === 'hotspot') {
@@ -274,21 +272,7 @@ export const CreateRoomModal: React.FC<CreateRoomModalProps> = ({ isOpen, onClos
           </div>
         </div>
 
-        {/* Initial Track Option */}
-        {currentTrack && (
-          <div className="p-2.5 sm:p-3 rounded-xl bg-zinc-900/80 border border-zinc-800 flex items-center justify-between">
-            <div className="min-w-0 pr-3">
-              <p className="text-xs font-medium text-white truncate">Start with currently playing song</p>
-              <p className="text-[10.5px] text-zinc-400 truncate">{currentTrack.title}</p>
-            </div>
-            <input
-              type="checkbox"
-              checked={includeCurrentTrack}
-              onChange={(e) => setIncludeCurrentTrack(e.target.checked)}
-              className="accent-white w-4 h-4 cursor-pointer"
-            />
-          </div>
-        )}
+
       </form>
     </Modal>
   );
